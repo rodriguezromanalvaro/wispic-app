@@ -1,3 +1,4 @@
+// app.config.ts
 import { ExpoConfig } from 'expo/config';
 
 const config: ExpoConfig = {
@@ -5,16 +6,14 @@ const config: ExpoConfig = {
   slug: 'wispic-app',
   scheme: 'wispic',
   orientation: 'portrait',
-  icon: './assets/icon.png',
+  // ❌ quitamos icon
   userInterfaceStyle: 'automatic',
   ios: {
     supportsTablet: false,
+    // ❌ sin icon iOS
   },
   android: {
-    adaptiveIcon: {
-      foregroundImage: './assets/adaptive-icon.png',
-      backgroundColor: '#000000',
-    },
+    // ❌ sin adaptiveIcon para evitar procesado de PNGs
     package: 'com.wispic.app',
   },
   web: {
@@ -23,9 +22,24 @@ const config: ExpoConfig = {
   plugins: [
     'expo-router',
     'expo-notifications',
+    'expo-updates',
   ],
   experiments: {
     typedRoutes: true,
+  },
+
+  // EAS / Updates
+  owner: 'arodrom',
+  extra: {
+    eas: {
+      projectId: 'f6d316e7-9b6c-437e-b86b-0ce379b25a0d',
+    },
+  },
+  updates: {
+    enabled: true,
+  },
+  runtimeVersion: {
+    policy: 'sdkVersion',
   },
 };
 
