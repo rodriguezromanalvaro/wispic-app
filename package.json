@@ -9,7 +9,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
+    "lint": "eslint app components lib --ext .ts,.tsx --max-warnings=0",
     "ci:verify": "node -e \"console.log('CI verify ok')\""
   },
   "dependencies": {
@@ -38,6 +38,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^16.4.0",
     "typescript": "~5.9.2"
   }
 }

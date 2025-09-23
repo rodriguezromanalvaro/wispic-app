@@ -35,7 +35,18 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# Ejemplo / dummy
 app-example
 
 # SQLite local DB
 *.db
+
+# --- NUEVO: artefactos generados que no deben ir a Git ---
+# Directorios de build/prebuild
+build/
+android/
+ios/
+
+# Archivos auxiliares generados por Expo Router/CLI
+_ctx*
+app.plugin.js

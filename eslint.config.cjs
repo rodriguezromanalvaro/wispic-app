@@ -1,41 +1,25 @@
-// eslint.config.cjs (ESLint v9 - flat config)
+// eslint.config.cjs
 const js = require('@eslint/js');
 const tsParser = require('@typescript-eslint/parser');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const reactPlugin = require('eslint-plugin-react');
 const reactHooks = require('eslint-plugin-react-hooks');
+const globals = require('globals');
 
 module.exports = [
-  // 1) Ignorados (reemplaza a .eslintignore)
-  {
-    ignores: [
-      'node_modules/**',
-      'dist/**',
-      'web-build/**',
-      '.expo/**',
-      'android/**',
-      'ios/**',
-      // archivos generados u ocultos
-      '**/*.min.*',
-    ],
-  },
+  // Ignora todo por defecto
+  { ignores: ['**/*'] },
 
-  // 2) Reglas base JS
-  {
-    ...js.configs.recommended,
-  },
+  // Reglas base JS (por si algún .js/.cjs en src)
+  { ...js.configs.recommended },
 
-  // 3) TS + React/React Hooks para .ts/.tsx
+  // Lint SOLO tu código fuente TS/TSX
   {
-    files: ['**/*.{ts,tsx}'],
+    files: ['app/**/*.{ts,tsx}', 'components/**/*.{ts,tsx}', 'lib/**/*.{ts,tsx}'],
     languageOptions: {
       parser: tsParser,
-      parserOptions: {
-        ecmaVersion: 2021,
-        sourceType: 'module',
-        // No exigimos "project" para evitar problemas de rendimiento/CI.
-        // Si quieres reglas más estrictas, añade: project: './tsconfig.json'
-      },
+      parserOptions: { ecmaVersion: 2021, sourceType: 'module' },
+      globals: { ...globals.browser, ...globals.node },
     },
     plugins: {
       '@typescript-eslint': tsPlugin,
@@ -43,19 +27,11 @@ module.exports = [
       'react-hooks': reactHooks,
     },
     rules: {
-      // TS
       'no-unused-vars': 'off',
-      '@typescript-eslint/no-unused-vars': [
-        'warn',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
-      ],
-
-      // React Hooks
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
     },
-    settings: {
-      react: { version: 'detect' },
-    },
+    settings: { react: { version: 'detect' } },
   },
 ];
