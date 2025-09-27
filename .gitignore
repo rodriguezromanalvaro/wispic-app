@@ -30,7 +30,12 @@ yarn-error.*
 *.pem
 
 # local env files
-.env*.local
+.env
+.env.*
+!.env.example
+
+# Supabase config
+supabase/config.toml
 
 # typescript
 *.tsbuildinfo
@@ -50,3 +55,8 @@ ios/
 # Archivos auxiliares generados por Expo Router/CLI
 _ctx*
 app.plugin.js
+".env" 
+"node_modules/" 
+".env" 
+".env.*" 
+"!.env.example" 
