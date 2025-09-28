@@ -15,7 +15,7 @@ function WithPushRegistration({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
 
   useEffect(() => {
-    let mounted = true;
+    let _mounted = true;
     (async () => {
       if (user) {
         try {
@@ -25,7 +25,7 @@ function WithPushRegistration({ children }: { children: React.ReactNode }) {
         }
       }
     })();
-    return () => { mounted = false; };
+    return () => { _mounted = false; };
   }, [user?.id]);
 
   return <>{children}</>;
