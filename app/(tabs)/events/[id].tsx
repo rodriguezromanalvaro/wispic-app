@@ -29,7 +29,7 @@ export default function EventDetail() {
         .select('*')
         .eq('id', eid)
         .maybeSingle();
-      if (e1) console.warn(e1);
+      if (e1) console.warn('Error loading event:', e1);
       setEvent(ev || null);
 
       // ¿Estoy apuntado?

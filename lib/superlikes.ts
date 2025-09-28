@@ -19,7 +19,7 @@ export async function getUsedToday(userId: string): Promise<number> {
     .eq('day', day)
     .maybeSingle();
   if (error) {
-    console.warn('getUsedToday error', error);
+    console.warn('Error en getUsedToday:', error);
     return 0;
   }
   return data?.used ?? 0;

@@ -25,3 +25,7 @@ export type ActionItem = {
   type: Status;
   likeRowId?: number | null;
 };
+
+// Re-export commonly used types
+export type { FilterState as UserDefaultFilters };
+export type { Profile as ProfileRow }; // For backward compatibility
