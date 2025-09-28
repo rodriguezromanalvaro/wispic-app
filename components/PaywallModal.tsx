@@ -24,7 +24,7 @@ export default function PaywallModal() {
   // Si cambia de usuario, refrescamos su premium
   useEffect(() => {
     if (user?.id) refresh(user.id);
-  }, [user?.id]);
+  }, [user?.id, refresh]);
 
   // Suscripción al "openPaywall"
   useEffect(() => {
@@ -40,14 +40,14 @@ export default function PaywallModal() {
     return () => {
       openListeners.delete(handler);
     };
-  }, [user?.id]);
+  }, [user?.id, refresh]);
 
   const activate = async () => {
     if (!user?.id) return;
     try {
       await setPremium(user.id, true);
       setVisible(false); // cerrar al activar
-    } catch (e: any) {
+    } catch {
       // podrías mostrar Alert si quieres
     }
   };
