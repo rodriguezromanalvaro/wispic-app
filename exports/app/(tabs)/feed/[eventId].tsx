@@ -20,10 +20,18 @@ import { useAuth } from '../../../lib/useAuth';
 import { canSuperlike, incSuperlike, remainingSuperlikes, decSuperlike } from '../../../lib/superlikes';
 import { ensureMatchConsistency } from '../../../lib/match';
 import { saveJSON, loadJSON } from '../../../lib/storage';
-import { loadUserDefaultFilters, saveUserDefaultFilters } from '../../../lib/userPrefs';
-import { Profile, FilterState, Status, ActionItem } from '../../../lib/types';
+import { loadUserDefaultFilters, saveUserDefaultFilters, type FilterState } from '../../../lib/userPrefs';
 import { usePremiumStore } from '../../../lib/premium';
 import { openPaywall } from '../../../components/PaywallModal';
+
+type ProfileRow = {
+  id: string;
+  display_name: string | null;
+  age: number | null;
+  gender: 'male' | 'female' | 'other' | null;
+  interests: string[] | null;
+};
+type Status = 'match' | 'superlike' | 'like' | 'pass' | 'new';
 
 function norm(s: string) {
   return s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
@@ -141,6 +149,12 @@ const Filters = React.memo(function Filters({
   );
 });
 
+type ActionItem = {
+  targetId: string;
+  type: Status;           // 'like' | 'superlike' | 'pass'
+  likeRowId?: number | null;
+};
+
 export default function FeedByEvent() {
   const { eventId, source } = useLocalSearchParams<{ eventId: string; source?: string }>();
   const eid = Number(eventId);
@@ -152,7 +166,7 @@ export default function FeedByEvent() {
   const { isPremium, refresh: refreshPremium } = usePremiumStore();
   useEffect(() => {
     if (user?.id) refreshPremium(user.id);
-  }, [user?.id, refreshPremium]);
+  }, [user?.id]);
 
   // estado local (optimista) por usuario
   const [local, setLocal] = useState<Map<string, Status>>(new Map());
@@ -262,7 +276,7 @@ export default function FeedByEvent() {
         .eq('type', 'superlike');
       const boostSet = new Set<string>((boosters || []).map((b: any) => b.liker));
 
-      return { rows: (profs || []) as Profile[], likeType, passSet, matchedSet, boostSet };
+      return { rows: (profs || []) as ProfileRow[], likeType, passSet, matchedSet, boostSet };
     },
   });
 
@@ -276,7 +290,7 @@ export default function FeedByEvent() {
   };
   const statusOf = (id: string): Status => local.get(id) ?? baseStatusOf(id);
 
-  const applyFilters = (rows: Profile[]) => {
+  const applyFilters = (rows: ProfileRow[]) => {
     const min = minAge.trim() ? Number(minAge) : null;
     const max = maxAge.trim() ? Number(maxAge) : null;
     const g = gender;
@@ -316,7 +330,7 @@ export default function FeedByEvent() {
   }, [people.length, index]);
 
   // util para ir a un usuario concreto si sigue visible con los filtros
-  const _goToUserIdIfPresent = (id: string) => {
+  const goToUserIdIfPresent = (id: string) => {
     const idx = people.findIndex((p) => p.id === id);
     if (idx >= 0) setIndex(idx);
   };

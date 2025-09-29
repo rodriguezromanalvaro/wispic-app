@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert } from 'react-native';
+import { View, Text, Alert } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../lib/useAuth';
@@ -24,7 +24,7 @@ export default function CompleteProfile() {
         setBio(data.bio || '');
       }
     })();
-  }, [user]);
+  }, [user?.id]);
 
   const saveProfile = async () => {
     if (!user) return;

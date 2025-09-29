@@ -16,7 +16,7 @@ export const usePremiumStore = create<PremiumStore>((set, get) => ({
   lastUserId: null,
 
   refresh: async (userId: string) => {
-    const cur = get().lastUserId;
+    const _cur = get().lastUserId;
     set({ loading: true, lastUserId: userId });
     try {
       const { data, error } = await supabase

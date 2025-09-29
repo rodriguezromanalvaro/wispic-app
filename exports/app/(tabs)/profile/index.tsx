@@ -17,18 +17,27 @@ import { theme } from '../../../lib/theme';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../lib/useAuth';
 import { useRouter } from 'expo-router';
-import { loadUserDefaultFilters, saveUserDefaultFilters } from '../../../lib/userPrefs';
-import { FilterState, Profile } from '../../../lib/types';
+import { loadUserDefaultFilters, saveUserDefaultFilters, type FilterState } from '../../../lib/userPrefs';
 
 // 👇 PREMIUM
 import { usePremiumStore } from '../../../lib/premium';
+
+type ProfileRow = {
+  id: string;
+  display_name: string | null;
+  bio: string | null;
+  age: number | null;
+  gender: 'male' | 'female' | 'other' | null;
+  interests: string[] | null;
+  is_premium?: boolean | null;
+};
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const qc = useQueryClient();
 
-  const { data: profile, isLoading } = useQuery<Profile | null>({
+  const { data: profile, isLoading } = useQuery<ProfileRow | null>({
     enabled: !!user,
     queryKey: ['profile', user?.id],
     queryFn: async () => {
@@ -38,7 +47,7 @@ export default function ProfileScreen() {
         .eq('id', user!.id)
         .maybeSingle();
       if (error) throw error;
-      return (data as Profile) ?? null;
+      return (data as ProfileRow) ?? null;
     },
   });
 
@@ -57,7 +66,7 @@ export default function ProfileScreen() {
       setGender(profile.gender ?? null);
       setInterests((profile.interests || []).join(', '));
     }
-  }, [profile]);
+  }, [profile?.id]);
 
   const save = async () => {
     if (!user) return;
@@ -146,7 +155,7 @@ export default function ProfileScreen() {
   const { isPremium, setPremium, refresh } = usePremiumStore();
   useEffect(() => {
     if (user?.id) refresh(user.id);
-  }, [user?.id, refresh]);
+  }, [user?.id]);
 
   const togglePremiumDemo = async () => {
     if (!user?.id) return;

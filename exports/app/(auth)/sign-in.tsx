@@ -58,7 +58,7 @@ export default function SignIn() {
     try {
       setLoadingIn(true);
       setMsg('Iniciando sesión…');
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password.trim(),
       });

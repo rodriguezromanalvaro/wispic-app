@@ -27,7 +27,7 @@ type MatchRow = {
   last_read_b: string | null;
 };
 
-import { Profile } from '../../../lib/types';
+type Profile = { id: string; display_name: string | null };
 
 type Message = {
   id: number;
@@ -105,8 +105,8 @@ export default function ChatThread() {
         await supabase.from('matches').update({ [col]: new Date().toISOString() } as any).eq('id', mid);
         qc.invalidateQueries({ queryKey: ['matches-enriched3', user.id] });
         qc.invalidateQueries({ queryKey: ['unread-count', user.id] }); // 👈 refresca badge
-      } catch (e: any) {
-        console.warn('Error marcando leído', e);
+      } catch (err) {
+        console.warn('Error marcando leído', err);
       }
     })();
   }, [match?.id, user?.id]);

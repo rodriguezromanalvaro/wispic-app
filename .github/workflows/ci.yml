@@ -1,0 +1,58 @@
+name: CI (lint + typecheck + Sentry release)
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      # TypeScript
+      - name: Type check
+        run: npm run typecheck
+
+      # ESLint (no corta por warnings en CI)
+      - name: Lint
+        run: npm run lint || true
+
+      # --- Detectar si hay secrets de Sentry sin usar 'secrets' en if ---
+      - name: Check Sentry secrets
+        id: sentry_check
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.SENTRY_AUTH_TOKEN }}" ] && [ -n "${{ secrets.SENTRY_ORG }}" ] && [ -n "${{ secrets.SENTRY_PROJECT }}" ]; then
+            echo "has_sentry=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_sentry=false" >> $GITHUB_OUTPUT
+          fi
+
+      # --- Sentry Release (solo si existen secrets) ---
+      - name: Create Sentry Release
+        if: steps.sentry_check.outputs.has_sentry == 'true'
+        uses: getsentry/action-release@v1
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        with:
+          environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }}
+          version: ${{ github.sha }}
+          finalize: true
+          ignore_empty: true
+          set_commits: auto
