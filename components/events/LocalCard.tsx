@@ -1,5 +1,5 @@
 import React, { memo, useEffect, useRef } from 'react';
-import { View, Text, Pressable, Animated, Easing, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { View, Text, Pressable, Animated, Easing, LayoutAnimation, Platform, UIManager, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Card } from '../ui';
 import { theme } from '../../lib/theme';
@@ -68,6 +68,7 @@ export const LocalCard = memo(function LocalCard(props: LocalCardProps) {
 
   const nextDate = new Date(nextDateISO);
   const nextLabel = nextDate.toLocaleDateString('es', { weekday:'short', day:'numeric', month:'short' });
+  const rel = relativeTime(nextDate);
   const eventIdOfNext = occurrences.find(o=>o.id) ? occurrences[0]?.id : undefined; // not strictly needed
 
   const anim = useRef(new Animated.Value(expanded ? 1 : 0)).current;
@@ -99,18 +100,24 @@ export const LocalCard = memo(function LocalCard(props: LocalCardProps) {
     <Card style={{ margin:16, marginTop:6, paddingLeft:12, overflow:'hidden', paddingBottom: sponsored ? 40 : 12 }}>
       <View style={{ position:'absolute', left:0, top:0, bottom:0, width:4, backgroundColor:'#6D4DFF' }} />
       {/* Header: title + attendees (removed primary series-level go button) */}
-      <View style={{ flexDirection:'row', alignItems:'flex-start', marginBottom:6 }}>
+      <View style={{ flexDirection:'row', alignItems:'flex-start', marginBottom:4 }}>
         <Pressable onPress={onToggleExpand} style={{ flex:1, paddingRight:8 }}>
-          <Text style={{ color: theme.colors.text, fontSize:18, lineHeight:22, fontWeight:'800' }} numberOfLines={2}>
-            {title}
-          </Text>
-          {attendeesCount > 0 && (
-            <Pressable onPress={() => eventIdOfNext && onOpenAttendees(eventIdOfNext)} style={{ marginTop:4 }}>
-              <AvatarStack avatars={attendeeAvatars} total={attendeesCount} />
-            </Pressable>
-          )}
+          <Text style={{ color: theme.colors.text, fontSize:18, lineHeight:22, fontWeight:'800' }} numberOfLines={2}>{title}</Text>
         </Pressable>
       </View>
+      {/* Compact dynamic badges row to use previous empty space */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom:6 }} contentContainerStyle={{ paddingRight:4, gap:6, flexDirection:'row', alignItems:'center' }}>
+        {isToday(nextDate) && <Badge tone="accent" label="HOY" />}
+        <Badge tone="neutral" label={rel} />
+        {totalFuture > 1 && <Badge tone="neutral" label={`+${totalFuture - 1} futuras`} />}
+        {weekDaysLabel && <Badge tone="outline" label={weekDaysLabel.replace(/\s*·\s*/g,'·')} />}
+        {venueType && venueType !== 'all' && <VenueTypeInline t={venueType} />}
+        {attendeesCount > 0 && (
+          <Pressable onPress={() => eventIdOfNext && onOpenAttendees(eventIdOfNext)}>
+            <Badge tone="primary" label={`${attendeesCount} van`} />
+          </Pressable>
+        )}
+      </ScrollView>
       {/* Summary block clickable to expand */}
       <Pressable onPress={onToggleExpand} style={{ paddingRight:8 }}>
         <Text style={{ color: theme.colors.textDim, fontSize:13 }}>
@@ -119,15 +126,7 @@ export const LocalCard = memo(function LocalCard(props: LocalCardProps) {
         {totalFuture > 1 && (
           <Text style={{ color: theme.colors.textDim, marginTop:2, fontSize:12 }}>+{totalFuture - 1} más próximamente</Text>
         )}
-        {weekDaysLabel && <DayBar label={weekDaysLabel} />}
-        <Text style={{ color: theme.colors.textDim, marginTop:4 }}>
-          {venueName || ''}{venueName ? ' · ' : ''}{city || ''}
-        </Text>
-        {venueType && venueType !== 'all' && (
-          <View style={[venueTypeBadgeStyle(venueType), { marginTop:4 }]}>
-            <Text style={venueTypeBadgeTextStyle(venueType)}>{venueTypeLabel(venueType)}</Text>
-          </View>
-        )}
+        <Text style={{ color: theme.colors.textDim, marginTop:2 }}>{venueName || ''}{venueName ? ' · ' : ''}{city || ''}</Text>
         {!expanded && (
           <View style={{ marginTop:8, alignSelf:'flex-start', backgroundColor: theme.colors.card, borderWidth:1, borderColor: theme.colors.primary + '55', paddingHorizontal:10, paddingVertical:4, borderRadius:14, flexDirection:'row', alignItems:'center' }}>
             <Text style={{ color: theme.colors.primary, fontSize:11, fontWeight:'600', letterSpacing:0.5 }}>VER FECHAS</Text>
@@ -203,6 +202,44 @@ function venueTypeLabel(t?: string) {
     case 'festival': return 'Festival';
     default: return '';
   }
+}
+
+// Small utility chips
+function Badge({ label, tone }: { label:string; tone: 'primary'|'accent'|'neutral'|'outline' }) {
+  let bg = theme.colors.card; let border = theme.colors.border; let color = theme.colors.textDim;
+  if(tone==='primary'){ bg = theme.colors.primary + '22'; border = theme.colors.primary + '55'; color = theme.colors.primary; }
+  if(tone==='accent'){ bg = '#FFE8A3'; border = '#FFC960'; color = '#7A4800'; }
+  if(tone==='outline'){ bg = theme.colors.card; border = theme.colors.border; color = theme.colors.textDim; }
+  return (
+    <View style={{ flexDirection:'row', alignItems:'center', paddingHorizontal:8, paddingVertical:3, borderRadius:14, borderWidth:1, backgroundColor:bg, borderColor:border }}>
+      <Text style={{ fontSize:11, fontWeight:'600', color }}>{label}</Text>
+    </View>
+  );
+}
+
+function VenueTypeInline({ t }: { t:string }) {
+  return (
+    <View style={[venueTypeBadgeStyle(t), { paddingVertical:2, paddingHorizontal:6 }] }>
+      <Text style={venueTypeBadgeTextStyle(t)}>{venueTypeLabel(t)}</Text>
+    </View>
+  );
+}
+
+function isToday(d: Date){ const n=new Date(); return d.getDate()===n.getDate() && d.getMonth()===n.getMonth() && d.getFullYear()===n.getFullYear(); }
+
+function relativeTime(dt: Date){
+  const now = new Date();
+  const diffMs = dt.getTime() - now.getTime();
+  const diffMin = Math.round(diffMs/60000);
+  if(diffMin <= 0) return 'Ahora';
+  if(diffMin < 60) return `En ${diffMin} min`;
+  const diffH = Math.round(diffMin/60);
+  if(diffH < 6) return `En ${diffH}h`;
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1); tomorrow.setHours(23,59,59,999);
+  if(dt.getDate()===tomorrow.getDate() && dt.getMonth()===tomorrow.getMonth() && dt.getFullYear()===tomorrow.getFullYear()) return 'Mañana';
+  const diffD = Math.round(diffH/24);
+  if(diffD < 7) return `En ${diffD}d`;
+  return dt.toLocaleDateString('es',{ day:'2-digit', month:'short' });
 }
 
 function venueTypeBadgeStyle(t: string) {
