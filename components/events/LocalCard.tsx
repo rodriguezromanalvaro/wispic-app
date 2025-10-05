@@ -98,7 +98,7 @@ export const LocalCard = memo(function LocalCard(props: LocalCardProps) {
   return (
     <Card style={{ margin:16, marginTop:6, paddingLeft:12, overflow:'hidden', paddingBottom: sponsored ? 40 : 12 }}>
       <View style={{ position:'absolute', left:0, top:0, bottom:0, width:4, backgroundColor:'#6D4DFF' }} />
-      {/* Unified header: title + attendees + big go button */}
+      {/* Header: title + attendees (removed primary series-level go button) */}
       <View style={{ flexDirection:'row', alignItems:'flex-start', marginBottom:6 }}>
         <Pressable onPress={onToggleExpand} style={{ flex:1, paddingRight:8 }}>
           <Text style={{ color: theme.colors.text, fontSize:18, lineHeight:22, fontWeight:'800' }} numberOfLines={2}>
@@ -110,26 +110,6 @@ export const LocalCard = memo(function LocalCard(props: LocalCardProps) {
             </Pressable>
           )}
         </Pressable>
-        {eventIdOfNext && (
-          <Pressable
-            onPress={() => onToggleGoing(eventIdOfNext, going)}
-            style={{
-              paddingHorizontal:16,
-              paddingVertical:8,
-              borderRadius:20,
-              backgroundColor: going ? theme.colors.primary : theme.colors.primary + '22',
-              borderWidth:1,
-              borderColor: going ? theme.colors.primary : theme.colors.primary + '55',
-              minWidth:78,
-              alignItems:'center'
-            }}
-            disabled={togglingIds.has(eventIdOfNext)}
-          >
-            <Text style={{ color: going ? theme.colors.white : theme.colors.primary, fontSize:14, fontWeight:'600' }}>
-              {togglingIds.has(eventIdOfNext) ? '...' : going ? '✓ Voy' : '+ Voy'}
-            </Text>
-          </Pressable>
-        )}
       </View>
       {/* Summary block clickable to expand */}
       <Pressable onPress={onToggleExpand} style={{ paddingRight:8 }}>
