@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
 
 export default function IndexGate() {
-  const [to, setTo] = useState<string | null>(null);
+  const [to, setTo] = useState<'/(auth)/sign-in' | '/(auth)/complete-profile' | '/(tabs)/events' | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -16,13 +16,22 @@ export default function IndexGate() {
         return;
       }
 
+      // Verificar si el perfil existe
       const { data: prof } = await supabase
         .from('profiles')
-        .select('id, display_name')
+        .select('id, display_name, birthdate')
         .eq('id', session.user.id)
         .maybeSingle();
+        
+      // Si el perfil no existe en absoluto, cerrar sesión y volver a sign-in
+      if (!prof) {
+        await supabase.auth.signOut();
+        setTo('/(auth)/sign-in');
+        return;
+      }
 
-      if (!prof?.display_name) {
+      // Si existe pero faltan datos obligatorios, ir a completar el perfil
+      if (!prof.display_name || !prof.birthdate) {
         setTo('/(auth)/complete-profile');
       } else {
         setTo('/(tabs)/events');

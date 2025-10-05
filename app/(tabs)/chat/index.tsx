@@ -6,6 +6,8 @@ import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../lib/useAuth';
 import { Screen, Card } from '../../../components/ui';
 import TopBar from '../../../components/TopBar';
+import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
+import { GradientScaffold } from '../../../features/profile/components/GradientScaffold';
 import { theme } from '../../../lib/theme';
 
 type MatchRow = {
@@ -14,9 +16,9 @@ type MatchRow = {
   user_b: string;
   superlike: boolean;
   last_message_at: string | null;
-  last_read_a: string | null;
-  last_read_b: string | null;
 };
+
+const AnimatedFlatList: any = Animated.createAnimatedComponent(FlatList as any);
 
 export default function ChatList() {
   const router = useRouter();
@@ -29,12 +31,21 @@ export default function ChatList() {
       // 1) Traer matches
       const { data: matches, error } = await supabase
         .from('matches')
-        .select('id,user_a,user_b,superlike,last_message_at,last_read_a,last_read_b')
+        .select('id,user_a,user_b,superlike,last_message_at')
         .or(`user_a.eq.${user!.id},user_b.eq.${user!.id}`);
       if (error) throw error;
 
       const list = (matches || []) as MatchRow[];
       if (!list.length) return [];
+
+      // Obtener lecturas propias desde match_reads (solo mi usuario)
+      const matchIds = list.map(m => m.id);
+      const { data: readRows } = await supabase
+        .from('match_reads')
+        .select('match_id,last_read_at')
+        .eq('user_id', user!.id)
+        .in('match_id', matchIds);
+      const mapReads = new Map<number, string>( (readRows||[]).map(r => [r.match_id, r.last_read_at]) );
 
       // 2) Nombres
       const otherIds = Array.from(new Set(list.map((m) => (m.user_a === user!.id ? m.user_b : m.user_a))));
@@ -45,7 +56,7 @@ export default function ChatList() {
       const enriched = await Promise.all(list.map(async (m) => {
         const otherId = m.user_a === user!.id ? m.user_b : m.user_a;
         const otherName = mapName.get(otherId) || 'Match';
-        const myRead = m.user_a === user!.id ? m.last_read_a : m.last_read_b;
+  const myRead = mapReads.get(m.id) || null;
 
         let unreadCount = 0;
         if (m.last_message_at) {
@@ -54,7 +65,7 @@ export default function ChatList() {
             .select('*', { count: 'exact', head: true })
             .eq('match_id', m.id)
             .neq('sender', user!.id)
-            .gt('created_at', myRead || '1970-01-01T00:00:00.000Z'); // si nunca leí, cuenta desde el inicio
+            .gt('created_at', myRead || '1970-01-01T00:00:00.000Z');
           unreadCount = count || 0;
         }
 
@@ -86,55 +97,67 @@ export default function ChatList() {
     return () => { supabase.removeChannel(chMsgs); supabase.removeChannel(chMatches); };
   }, []);
 
-  if (isLoading) return <ActivityIndicator style={{ marginTop: 40 }} color={theme.colors.primary} />;
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (e) => { scrollY.value = e.contentOffset.y; }
+  });
+
+  if (isLoading) {
+    return (
+      <Screen style={{ padding:0 }}>
+        <GradientScaffold>
+          <TopBar title="Chats" mode="overlay" hideBack scrollY={scrollY} />
+          <View style={{ flex:1, paddingTop:120, alignItems:'center' }}>
+            <ActivityIndicator style={{ marginTop:40 }} color={theme.colors.primary} />
+          </View>
+        </GradientScaffold>
+      </Screen>
+    );
+  }
 
   return (
-    <Screen>
-      <TopBar title="Chats" hideBack />
-      <FlatList
-        data={data || []}
-        refreshing={isRefetching}
-        onRefresh={refetch}
-        keyExtractor={(m) => String(m.id)}
-        ItemSeparatorComponent={() => <View style={{ height: theme.spacing(1) }} />}
-        renderItem={({ item }) => (
-          <Pressable onPress={() => router.push(`/(tabs)/chat/${item.id}`)}>
-            <Card style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing(1) }}>
-              <View style={{
-                width: 40, height: 40, borderRadius: 20, backgroundColor: theme.colors.card,
-                alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.colors.border,
-              }}>
-                <Text style={{ color: theme.colors.text, fontWeight: '800' }}>
-                  {item.otherName.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Text style={{ color: theme.colors.text, fontWeight: '800', fontSize: 16 }}>
-                    {item.otherName}
+    <Screen style={{ padding:0 }}>
+      <GradientScaffold>
+        <TopBar title="Chats" mode="overlay" hideBack scrollY={scrollY} />
+        <AnimatedFlatList
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          data={data || []}
+          refreshing={isRefetching}
+          onRefresh={refetch}
+          keyExtractor={(m:any) => String(m.id)}
+          contentContainerStyle={{ paddingTop:120, paddingBottom:48, paddingHorizontal:16, gap: theme.spacing(1) }}
+          ItemSeparatorComponent={() => <View style={{ height: theme.spacing(1) }} />}
+          renderItem={({ item }: any) => (
+            <Pressable onPress={() => router.push(`/(tabs)/chat/${item.id}`)}>
+              <Card style={{ flexDirection:'row', alignItems:'center', gap: theme.spacing(1) }}>
+                <View style={{ width:40, height:40, borderRadius:20, backgroundColor: theme.colors.card, alignItems:'center', justifyContent:'center', borderWidth:1, borderColor: theme.colors.border }}>
+                  <Text style={{ color: theme.colors.text, fontWeight:'800' }}>
+                    {item.otherName.charAt(0).toUpperCase()}
                   </Text>
-                  {item.superlike && <Text style={{ color: '#F59E0B', fontWeight: '900' }}>⭐</Text>}
-                  {item.unreadCount > 0 && (
-                    <View style={{ marginLeft: 4, minWidth: 24, paddingHorizontal: 6, paddingVertical: 2,
-                      backgroundColor: theme.colors.primary, borderRadius: 999, alignItems: 'center' }}>
-                      <Text style={{ color: theme.colors.primaryText, fontWeight: '800', fontSize: 12 }}>
-                        {item.unreadCount}
-                      </Text>
-                    </View>
+                </View>
+                <View style={{ flex:1 }}>
+                  <View style={{ flexDirection:'row', alignItems:'center', gap:8 }}>
+                    <Text style={{ color: theme.colors.text, fontWeight:'800', fontSize:16 }}>{item.otherName}</Text>
+                    {item.superlike && <Text style={{ color:'#F59E0B', fontWeight:'900' }}>⭐</Text>}
+                    {item.unreadCount > 0 && (
+                      <View style={{ marginLeft:4, minWidth:24, paddingHorizontal:6, paddingVertical:2, backgroundColor: theme.colors.primary, borderRadius:999, alignItems:'center' }}>
+                        <Text style={{ color: theme.colors.primaryText, fontWeight:'800', fontSize:12 }}>{item.unreadCount}</Text>
+                      </View>
+                    )}
+                  </View>
+                  {!!item.last_message_at && (
+                    <Text style={{ color: theme.colors.subtext, marginTop:2, fontSize:12 }}>
+                      Último: {new Date(item.last_message_at).toLocaleString()}
+                    </Text>
                   )}
                 </View>
-                {!!item.last_message_at && (
-                  <Text style={{ color: theme.colors.subtext, marginTop: 2, fontSize: 12 }}>
-                    Último: {new Date(item.last_message_at).toLocaleString()}
-                  </Text>
-                )}
-              </View>
-            </Card>
-          </Pressable>
-        )}
-        ListEmptyComponent={<Card><Text style={{ color: theme.colors.text }}>Aún no tienes chats.</Text></Card>}
-      />
+              </Card>
+            </Pressable>
+          )}
+          ListEmptyComponent={<Card><Text style={{ color: theme.colors.text }}>Aún no tienes chats.</Text></Card>}
+        />
+      </GradientScaffold>
     </Screen>
   );
 }

@@ -8,7 +8,6 @@ import {
   TextInput,
   Pressable,
   Platform,
-  ScrollView,
 } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
@@ -23,6 +22,8 @@ import { saveJSON, loadJSON } from '../../../lib/storage';
 import { loadUserDefaultFilters, saveUserDefaultFilters } from '../../../lib/userPrefs';
 import { Profile, FilterState, Status, ActionItem } from '../../../lib/types';
 import { usePremiumStore } from '../../../lib/premium';
+import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
+import { GradientScaffold } from '../../../features/profile/components/GradientScaffold';
 import { openPaywall } from '../../../components/PaywallModal';
 
 function norm(s: string) {
@@ -227,10 +228,18 @@ export default function FeedByEvent() {
 
       const ids = (att || []).map((a: any) => a.user_id).filter((id: string) => id !== user!.id);
 
-      const { data: profs } = await supabase
+      const { data: profsRaw } = await supabase
         .from('profiles')
-        .select('id, display_name, age, gender, interests')
+        .select('id, display_name, calculated_age:age, gender, interests')
         .in('id', ids);
+      const profs: Profile[] = (profsRaw || []).map((r: any) => ({
+        id: r.id,
+        display_name: r.display_name ?? null,
+        bio: null,
+        age: typeof r.calculated_age === 'number' ? r.calculated_age : r.calculated_age ?? null,
+        gender: r.gender ?? null,
+        interests: r.interests ?? null,
+      }));
 
       // mis decisiones previas
       const { data: myPositives } = await supabase
@@ -262,7 +271,7 @@ export default function FeedByEvent() {
         .eq('type', 'superlike');
       const boostSet = new Set<string>((boosters || []).map((b: any) => b.liker));
 
-      return { rows: (profs || []) as Profile[], likeType, passSet, matchedSet, boostSet };
+  return { rows: profs, likeType, passSet, matchedSet, boostSet };
     },
   });
 
@@ -504,11 +513,19 @@ export default function FeedByEvent() {
     : people[index];
   const onBack = () => router.replace('/(tabs)/feed');
 
-  return (
-    <Screen>
-      <TopBar title={`Feed de ${eventTitle ?? `evento ${eid}`}`} onBack={onBack} />
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler({ onScroll: (e) => { scrollY.value = e.contentOffset.y; } });
 
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: theme.spacing(1), paddingBottom: theme.spacing(2) }}>
+  return (
+    <Screen style={{ padding:0 }}>
+      <GradientScaffold>
+        <TopBar title={`Feed de ${eventTitle ?? `evento ${eid}`}`} onBack={onBack} mode="overlay" scrollY={scrollY} />
+
+      <Animated.ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ gap: theme.spacing(1), paddingBottom: 72, paddingTop:120, paddingHorizontal:16 }}>
         <Filters
           minAge={minAge} setMinAge={setMinAge}
           maxAge={maxAge} setMaxAge={setMaxAge}
@@ -603,7 +620,8 @@ export default function FeedByEvent() {
             </View>
           </Card>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
+      </GradientScaffold>
     </Screen>
   );
 }

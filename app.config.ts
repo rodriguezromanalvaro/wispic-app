@@ -15,6 +15,8 @@ const config: ExpoConfig = {
   android: {
     // ❌ sin adaptiveIcon para evitar procesado de PNGs
     package: 'com.wispic.app',
+    // Evita que el teclado tape el contenido en Android
+    softwareKeyboardLayoutMode: 'pan',
   },
   web: {
     bundler: 'metro',

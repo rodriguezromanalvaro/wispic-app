@@ -16,6 +16,8 @@ import { useAuth } from '../../../lib/useAuth';
 import { Screen, Card, Button } from '../../../components/ui';
 import TopBar from '../../../components/TopBar';
 import { theme } from '../../../lib/theme';
+import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
+import { GradientScaffold } from '../../../features/profile/components/GradientScaffold';
 
 type MatchRow = {
   id: number;
@@ -23,8 +25,6 @@ type MatchRow = {
   user_b: string;
   superlike: boolean;
   last_message_at: string | null;
-  last_read_a: string | null;
-  last_read_b: string | null;
 };
 
 import { Profile } from '../../../lib/types';
@@ -54,7 +54,7 @@ export default function ChatThread() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('matches')
-        .select('id,user_a,user_b,superlike,last_message_at,last_read_a,last_read_b')
+  .select('id,user_a,user_b,superlike,last_message_at')
         .eq('id', mid)
         .maybeSingle();
       if (error) throw error;
@@ -99,12 +99,13 @@ export default function ChatThread() {
   // 4) Marcar leído al entrar
   useEffect(() => {
     if (!match || !user) return;
-    const col = match.user_a === user.id ? 'last_read_a' : 'last_read_b';
     (async () => {
       try {
-        await supabase.from('matches').update({ [col]: new Date().toISOString() } as any).eq('id', mid);
+        await supabase.from('match_reads')
+          .upsert({ match_id: mid, user_id: user.id, last_read_at: new Date().toISOString() })
+          .select();
         qc.invalidateQueries({ queryKey: ['matches-enriched3', user.id] });
-        qc.invalidateQueries({ queryKey: ['unread-count', user.id] }); // 👈 refresca badge
+        qc.invalidateQueries({ queryKey: ['unread-count', user.id] });
       } catch (e: any) {
         console.warn('Error marcando leído', e);
       }
@@ -119,9 +120,10 @@ export default function ChatThread() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${mid}` }, async () => {
         await refetchMsgs();
         if (match && user) {
-          const col = match.user_a === user.id ? 'last_read_a' : 'last_read_b';
-          await supabase.from('matches').update({ [col]: new Date().toISOString() } as any).eq('id', mid);
-          qc.invalidateQueries({ queryKey: ['unread-count', user.id] }); // 👈 refresca badge
+          await supabase.from('match_reads')
+            .upsert({ match_id: mid, user_id: user.id, last_read_at: new Date().toISOString() })
+            .select();
+          qc.invalidateQueries({ queryKey: ['unread-count', user.id] });
         }
       })
       .subscribe();
@@ -163,22 +165,39 @@ export default function ChatThread() {
     );
 
     // 👇 me marco leído tras enviar y refresco badge
-    const col = match.user_a === user.id ? 'last_read_a' : 'last_read_b';
-    await supabase.from('matches').update({ [col]: new Date().toISOString() } as any).eq('id', mid);
+    await supabase.from('match_reads')
+      .upsert({ match_id: mid, user_id: user.id, last_read_at: new Date().toISOString() })
+      .select();
 
     qc.invalidateQueries({ queryKey: ['matches-enriched3', user.id] });
     qc.invalidateQueries({ queryKey: ['unread-count', user.id] }); // 👈 refresca badge
   };
 
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler({ onScroll: (e) => { scrollY.value = e.contentOffset.y; } });
+
   if (loadingMatch || loadingMsgs) {
-    return <ActivityIndicator style={{ marginTop: 40 }} color={theme.colors.primary} />;
+    return (
+      <Screen style={{ padding:0 }}>
+        <GradientScaffold>
+          <TopBar title="Chat" mode="overlay" scrollY={scrollY} onBack={() => router.replace('/(tabs)/chat')} />
+          <View style={{ flex:1, paddingTop:120, alignItems:'center' }}>
+            <ActivityIndicator style={{ marginTop:40 }} color={theme.colors.primary} />
+          </View>
+        </GradientScaffold>
+      </Screen>
+    );
   }
 
   if (!match) {
     return (
-      <Screen>
-        <TopBar title="Chat" onBack={() => router.replace('/(tabs)/chat')} />
-        <Card><Text style={{ color: theme.colors.text }}>Chat no encontrado.</Text></Card>
+      <Screen style={{ padding:0 }}>
+        <GradientScaffold>
+          <TopBar title="Chat" mode="overlay" scrollY={scrollY} onBack={() => router.replace('/(tabs)/chat')} />
+          <View style={{ flex:1, paddingTop:120 }}>
+            <Card style={{ margin:16 }}><Text style={{ color: theme.colors.text }}>Chat no encontrado.</Text></Card>
+          </View>
+        </GradientScaffold>
       </Screen>
     );
   }
@@ -192,16 +211,18 @@ export default function ChatThread() {
       behavior={Platform.select({ ios: 'padding', android: undefined })}
       keyboardVerticalOffset={Platform.select({ ios: 64, android: 0 }) as number}
     >
-      <Screen>
-        <TopBar title={title} onBack={() => router.replace('/(tabs)/chat')} />
-
-        <FlatList
-          data={messages || []}
-          keyExtractor={(m) => String(m.id)}
-          refreshing={isRefetching}
-          onRefresh={refetchMsgs}
-          contentContainerStyle={{ paddingBottom: 12 }}
-          renderItem={({ item }) => {
+      <Screen style={{ padding:0 }}>
+        <GradientScaffold>
+          <TopBar title={title} onBack={() => router.replace('/(tabs)/chat')} mode="overlay" scrollY={scrollY} />
+          <Animated.FlatList
+            onScroll={onScroll}
+            scrollEventThrottle={16}
+            data={messages || []}
+            keyExtractor={(m:any) => String(m.id)}
+            refreshing={isRefetching}
+            onRefresh={refetchMsgs}
+            contentContainerStyle={{ paddingTop:120, paddingBottom: 80, paddingHorizontal:12 }}
+            renderItem={({ item }: any) => {
             const mine = item.sender === user?.id;
             return (
               <View style={{ paddingVertical: 6, alignItems: mine ? 'flex-end' : 'flex-start' }}>
@@ -242,16 +263,16 @@ export default function ChatThread() {
               </View>
             );
           }}
-          ListEmptyComponent={
-            <Card>
-              <Text style={{ color: theme.colors.text }}>
-                Aún no hay mensajes. ¡Saluda a {otherName}!
-              </Text>
-            </Card>
-          }
-        />
+            ListEmptyComponent={
+              <Card>
+                <Text style={{ color: theme.colors.text }}>
+                  Aún no hay mensajes. ¡Saluda a {otherName}!
+                </Text>
+              </Card>
+            }
+          />
 
-        <View
+          <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
@@ -260,7 +281,11 @@ export default function ChatThread() {
             paddingVertical: 10,
             borderTopWidth: 1,
             borderColor: theme.colors.border,
-            backgroundColor: theme.colors.bg,
+            backgroundColor: theme.colors.bgAlt,
+            position:'absolute',
+            left:0,
+            right:0,
+            bottom:0,
           }}
         >
           <TextInput
@@ -283,7 +308,8 @@ export default function ChatThread() {
             returnKeyType="send"
           />
           <Button title="Enviar" onPress={send} />
-        </View>
+          </View>
+        </GradientScaffold>
       </Screen>
     </KeyboardAvoidingView>
   );

@@ -5,7 +5,7 @@ import { theme } from '../lib/theme';
 import { useAuth } from '../lib/useAuth';
 import { usePremiumStore } from '../lib/premium';
 import Paywall from './Paywall'; // Asegúrate: archivo se llama "Paywall.tsx" (P mayúscula)
-import { Card } from './ui';
+import { Card, Button, Divider } from './ui';
 
 // --- Event bus mínimo para abrir/cerrar desde cualquier sitio ---
 type Listener = (reason?: string) => void;
@@ -57,13 +57,15 @@ export default function PaywallModal() {
   // Si ya es premium, no renderizamos nada
   if (isPremium) return null;
 
+  const isDark = theme.mode === 'dark';
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
       <View style={{
-        flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+        flex: 1,
+        backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.30)',
         alignItems: 'center', justifyContent: 'center', padding: 16,
       }}>
-        <Card style={{ width: '100%', maxWidth: 420, gap: 12 }}>
+        <Card style={{ width: '100%', maxWidth: 420, gap: 12, padding: 24 }}>
           <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '800' }}>
             Wispic Premium
           </Text>
@@ -73,19 +75,14 @@ export default function PaywallModal() {
             </Text>
           )}
           <Paywall />
+          <Divider style={{ marginVertical: 4 }} />
           <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'flex-end' }}>
-            <Pressable onPress={close} style={{ paddingVertical: 10, paddingHorizontal: 14 }}>
-              <Text style={{ color: theme.colors.text, fontWeight: '700' }}>Ahora no</Text>
-            </Pressable>
-            <Pressable
-              onPress={activate}
-              style={{
-                paddingVertical: 10, paddingHorizontal: 14,
-                backgroundColor: theme.colors.primary, borderRadius: theme.radius,
-              }}
-            >
-              <Text style={{ color: theme.colors.primaryText, fontWeight: '800' }}>Activar Premium</Text>
-            </Pressable>
+            <View style={{ flex:1 }}>
+              <Button title="Ahora no" variant="ghost" onPress={close} />
+            </View>
+            <View style={{ flex:1 }}>
+              <Button title="Activar" gradient onPress={activate} />
+            </View>
           </View>
         </Card>
       </View>

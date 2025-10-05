@@ -39,7 +39,7 @@ export default function Paywall({ onClose, onBuy, context = 'undo' }: Props) {
           <Button title="Activar Premium" onPress={async () => { await onBuy?.(); onClose?.(); }} />
         </View>
         <View style={{ flex: 1 }}>
-          <Button title="Ahora no" variant="ghost" onPress={onClose} />
+          <Button title="Ahora no" variant="ghost" onPress={onClose ?? (() => {})} />
         </View>
       </View>
     </View>

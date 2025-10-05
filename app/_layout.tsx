@@ -3,11 +3,15 @@ import { Slot } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '../lib/useAuth';
 import { theme } from '../lib/theme';
+import { ThemeProvider, useThemeMode } from '../lib/theme-context';
 import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useEffect } from 'react';
 import { registerPushTokenForUser } from '../lib/push';
 import PaywallModal from '../components/PaywallModal';
+import '../lib/i18n';
+import { ToastProvider } from '../lib/toast';
 
 const queryClient = new QueryClient();
 
@@ -31,18 +35,30 @@ function WithPushRegistration({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function InnerApp() {
+  const { mode, theme: dynTheme } = useThemeMode();
+  return (
+    <View style={{ flex: 1, backgroundColor: dynTheme.colors.bg }}>
+      <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
+      <Slot />
+      <PaywallModal />
+    </View>
+  );
+}
+
 export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <WithPushRegistration>
-          <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
-            <StatusBar style="light" />
-            <Slot />
-            {/* 👇 NUEVO: montamos el modal global aquí */}
-            <PaywallModal />
-          </View>
-        </WithPushRegistration>
+        <ThemeProvider initialMode={theme.mode}>
+          <WithPushRegistration>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <ToastProvider>
+                <InnerApp />
+              </ToastProvider>
+            </GestureHandlerRootView>
+          </WithPushRegistration>
+        </ThemeProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
