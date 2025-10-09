@@ -72,6 +72,14 @@ const config: ExpoConfig = {
     'expo-barcode-scanner',
     'sentry-expo',
     'expo-apple-authentication',
+    [
+      'expo-build-properties',
+      {
+        android: {
+          newArchEnabled: false
+        }
+      }
+    ],
   ],
   experiments: {
     typedRoutes: true,
