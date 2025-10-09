@@ -13,14 +13,6 @@
       "env": {
         "APP_ENV": "development",
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
-      },
-      "hooks": {
-        "postInstall": [
-          {
-            "command": "bash -lc 'if [ -f android/gradle.properties ]; then sed -i.bak "'"'s/^newArchEnabled=.*/newArchEnabled=false/'"'" android/gradle.properties; fi'",
-            "name": "Disable RN New Architecture on Android"
-          }
-        ]
       }
     },
     "preview": {
