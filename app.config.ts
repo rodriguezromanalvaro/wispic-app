@@ -76,7 +76,7 @@ const config: ExpoConfig = {
       'expo-build-properties',
       {
         android: {
-          newArchEnabled: false,
+          newArchEnabled: true,
           kotlinVersion: '2.0.21',
           kotlinJvmTarget: '17',
           compileSdkVersion: 35,
