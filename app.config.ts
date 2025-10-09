@@ -8,6 +8,8 @@ const config: ExpoConfig = {
   orientation: 'portrait',
   // ❌ quitamos icon
   userInterfaceStyle: 'automatic',
+  // Enable React Native New Architecture at app-config level (preferred over plugin flag)
+  newArchEnabled: true,
   ios: {
     supportsTablet: false,
     // ❌ sin icon iOS
@@ -76,7 +78,6 @@ const config: ExpoConfig = {
       'expo-build-properties',
       {
         android: {
-          newArchEnabled: true,
           kotlinVersion: '2.0.21',
           kotlinJvmTarget: '17',
           compileSdkVersion: 35,
