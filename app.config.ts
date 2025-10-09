@@ -47,7 +47,6 @@ const config: ExpoConfig = {
       'ACCESS_BACKGROUND_LOCATION',
       'CAMERA',
       'POST_NOTIFICATIONS',
-      'com.android.vending.BILLING',
     ],
      googleServicesFile: './google-services.json',
     adaptiveIcon: {
