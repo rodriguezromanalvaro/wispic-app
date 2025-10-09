@@ -77,7 +77,10 @@ const config: ExpoConfig = {
       {
         android: {
           newArchEnabled: false,
-          kotlinVersion: '1.9.24'
+          kotlinVersion: '1.9.24',
+          kotlinJvmTarget: '17',
+          compileSdkVersion: 35,
+          targetSdkVersion: 35
         }
       }
     ],
