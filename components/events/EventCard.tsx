@@ -34,7 +34,7 @@ export const EventCard = memo(function EventCard(props: EventCardProps) {
       {/* Unified top row: title + attendees + GO button */}
       <View style={{ flexDirection:'row', alignItems:'flex-start', marginBottom:6 }}>
         <Pressable onPress={() => onOpen(id)} style={{ flex:1, paddingRight:8 }}>
-          <Text style={{ color: theme.colors.text, fontSize:18, lineHeight:22, fontWeight:'800' }} numberOfLines={2}>{title}</Text>
+          <Text style={{ color: theme.colors.text, fontSize:22, lineHeight:27, fontWeight:'800' }} numberOfLines={2}>{title}</Text>
           <Text style={{ color: theme.colors.textDim, marginTop:4, fontSize:14 }}>
             {dateLabel} · {time}
           </Text>
@@ -62,7 +62,7 @@ export const EventCard = memo(function EventCard(props: EventCardProps) {
           disabled={toggling}
         >
           <Text style={{ color: going ? theme.colors.white : theme.colors.primary, fontSize:14, fontWeight:'600' }}>
-            {toggling ? '...' : going ? '✓ Voy' : '+ Voy'}
+            {toggling ? '...' : going ? 'Dejar de ir' : 'Voy'}
           </Text>
         </Pressable>
       </View>

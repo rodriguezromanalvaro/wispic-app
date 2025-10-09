@@ -2,20 +2,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, View, Text, Pressable, TextInput, ScrollView, Alert, SectionList } from 'react-native';
 import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../lib/useAuth';
 import { Screen, Card } from '../../../components/ui';
-import TopBar from '../../../components/TopBar';
 import { theme } from '../../../lib/theme';
 import { useEventsFiltersStore } from '../../../lib/stores/eventsFilters';
 import { useFeedScopeStore } from '../../../lib/stores/feedScope';
 import { useRefetchOnFocus } from '../../../lib/useRefetchOnFocus';
 import { LocalCard } from '../../../components/events/LocalCard';
 import { EventCard } from '../../../components/events/EventCard';
-import { useEventSheetStore } from '../../../lib/stores/eventSheet';
-import { EventDetailSheet } from '../../../components/events/EventDetailSheet';
 import { useAttendeesSheetStore } from '../../../lib/stores/attendeesSheet';
 import { AttendeesSheet } from '../../../components/events/AttendeesSheet';
 
@@ -32,7 +29,6 @@ type SeriesItem = {
   weekDaysLabel?:string;
   occurrences:any[];
   occurrencesHasMore:boolean;
-  totalFutureOccurrences:number;
   attendeesCount:number;
   attendeeAvatars:any[];
 };
@@ -53,7 +49,6 @@ type FilterRange = 'today' | '7' | '30' | 'all';
 export default function Events(){
   const router = useRouter();
   const { user } = useAuth();
-  const openEventSheet = useEventSheetStore(s=>s.openWith);
   const openAttendeesSheet = useAttendeesSheetStore(s=>s.openFor);
 
   const range = useEventsFiltersStore(s=>s.range);
@@ -66,6 +61,7 @@ export default function Events(){
   const setFeedScope = useFeedScopeStore(s=>s.setFeedScope);
   const [showCityPicker, setShowCityPicker] = useState(false);
   const [expandedSeriesIds, setExpandedSeriesIds] = useState<Set<number>>(new Set());
+  const qc = useQueryClient();
 
   // Cities
   const { data: cities } = useQuery({
@@ -165,7 +161,7 @@ export default function Events(){
         const weekDaysSet = new Set<number>();
         evs.forEach(e=> { const dt = new Date(e.start_at); if(dt>=now && dt<next7End){ weekDaysSet.add((dt.getDay()+6)%7); } });
         const weekDaysLabel = Array.from(weekDaysSet).sort((a,b)=>a-b).map(i=> dayLabels[i]).join(' · ');
-        items.push({ kind:'series', id:`s-${sid}`, series, nextEv, going: goingSet.has(nextEv.id), sponsored: combinedSponsored, sponsoredPriority: combinedPriority, weekDaysLabel, occurrences, occurrencesHasMore, totalFutureOccurrences: future.length, attendeesCount: attendanceCounts[nextEv.id]||0, attendeeAvatars: avatarSamples[nextEv.id]||[] });
+  items.push({ kind:'series', id:`s-${sid}`, series, nextEv, going: goingSet.has(nextEv.id), sponsored: combinedSponsored, sponsoredPriority: combinedPriority, weekDaysLabel, occurrences, occurrencesHasMore, attendeesCount: attendanceCounts[nextEv.id]||0, attendeeAvatars: avatarSamples[nextEv.id]||[] });
       }
 
       // Standalone events
@@ -189,13 +185,62 @@ export default function Events(){
   const [toggling, setToggling] = useState<Set<number>>(new Set());
   const toggleGoing = async (eventId:number, going:boolean) => {
     if(!user){ Alert.alert('Inicia sesión','Necesitas una cuenta.'); return; }
+    // Optimistic cache update for this query key
     setToggling(s=> new Set(s).add(eventId));
+    const qKey = ['events-full', user.id, selectedCityId, range];
+    const prev = qc.getQueryData<any[]>(qKey);
+    const optimistic = (items:any[]|undefined) => {
+      if(!Array.isArray(items)) return items;
+      return items.map(it => {
+        if(it.kind==='event' && it.ev.id === eventId) return { ...it, going: !going };
+        if(it.kind==='series') {
+          // update occurrences and nextEv.going if relevant
+            const occs = it.occurrences?.map((o:any)=> o.id===eventId? { ...o, going: !going }: o) || it.occurrences;
+            const nextEv = it.nextEv && it.nextEv.id === eventId ? { ...it.nextEv, going: !going } : it.nextEv;
+            return { ...it, occurrences: occs, nextEv, going: nextEv? nextEv.going : it.going };
+        }
+        return it;
+      });
+    };
+    qc.setQueryData(qKey, optimistic(prev));
     try{
-      if(going){ await supabase.from('event_attendance').delete().match({ event_id:eventId, user_id:user.id, status:'going' }); }
-      else { await supabase.from('event_attendance').upsert({ event_id:eventId, user_id:user.id, status:'going' }, { onConflict:'event_id,user_id' }); }
-      refetch();
-    }catch(e:any){ Alert.alert('Error', e.message||'No se pudo actualizar'); }
-    finally { setToggling(s=> { const n=new Set(s); n.delete(eventId); return n; }); }
+      if(going){
+        // Usar RPC leave_event (SECURITY DEFINER) para asegurar permiso
+        const { error: rpcErr } = await supabase.rpc('leave_event', { p_event: eventId });
+        if(rpcErr){
+          console.warn('[toggleGoing] RPC leave_event error, fallback delete', rpcErr.message);
+          const { error: delErr } = await supabase
+            .from('event_attendance')
+            .delete()
+            .match({ event_id:eventId, user_id:user.id });
+          if(delErr) throw delErr;
+        }
+      } else {
+        const { error: rpcErr } = await supabase.rpc('join_event', { p_event: eventId });
+        if(rpcErr){
+          console.warn('[toggleGoing] RPC join_event error, fallback upsert', rpcErr.message);
+          const { error } = await supabase.from('event_attendance').upsert({ event_id:eventId, user_id:user.id, status:'going' }, { onConflict:'event_id,user_id' });
+          if(error) throw error;
+        }
+      }
+      // Verificación rápida
+      const { data: verify } = await supabase.from('event_attendance').select('status').match({ event_id:eventId, user_id:user.id }).maybeSingle();
+      console.info('[toggleGoing verify]', eventId, 'after op status=>', verify?.status ?? '(no row)');
+      if(going && verify?.status==='going'){
+        console.warn('[toggleGoing] fila sigue presente tras delete. Revisa RLS: permitir DELETE al propietario (user_id). Rollback UI');
+        // Rollback porque realmente no saliste
+        qc.setQueryData(qKey, prev);
+        Alert.alert('No se pudo salir','Tu sesión no tiene permiso para eliminar la asistencia (RLS).');
+      } else {
+        setTimeout(()=> refetch(), 400);
+      }
+    }catch(e:any){
+      // rollback
+      qc.setQueryData(qKey, prev);
+      Alert.alert('Error', e.message||'No se pudo actualizar');
+    } finally {
+      setToggling(s=> { const n=new Set(s); n.delete(eventId); return n; });
+    }
   };
 
   // Filter & sections
@@ -254,13 +299,11 @@ export default function Events(){
     if(!user) return; const ch = supabase.channel('events-rt-att').on('postgres_changes',{ event:'*', schema:'public', table:'event_attendance', filter:`user_id=eq.${user.id}`}, ()=> refetch()).subscribe(); return ()=> { supabase.removeChannel(ch); };
   },[user?.id, refetch]);
 
-  const scrollY = useSharedValue(0);
-  const onScroll = useAnimatedScrollHandler({ onScroll: e=> { scrollY.value = e.contentOffset.y; } });
+  const onScroll = useAnimatedScrollHandler({ onScroll: () => {} });
 
   if(isLoading || error){
     return <Screen style={{ padding:0 }}>
-      <TopBar title="Eventos" mode="overlay" hideBack scrollY={scrollY} />
-      <View style={{ flex:1, justifyContent:'center', alignItems:'center' }}>
+      <View style={{ flex:1, justifyContent:'center', alignItems:'center', paddingTop:16 }}>
         {isLoading ? <ActivityIndicator color={theme.colors.primary}/> : <Text style={{ color: theme.colors.text }}>Error al cargar</Text>}
       </View>
     </Screen>;
@@ -268,7 +311,6 @@ export default function Events(){
 
   return (
     <Screen style={{ padding:0 }}>
-      <TopBar title="Eventos" mode="overlay" hideBack scrollY={scrollY} />
       <AnimatedSectionList
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -276,10 +318,11 @@ export default function Events(){
         keyExtractor={(item:RawItem)=> item.id }
         refreshing={isRefetching}
         onRefresh={refetch}
-        contentContainerStyle={{ paddingBottom:56, paddingTop:120 }}
+        contentContainerStyle={{ paddingBottom:56, paddingTop:16 }}
         ListHeaderComponent={
           <View style={{ marginBottom:4 }}>
             {/* Ciudad */}
+            <Text style={{ color: theme.colors.textDim, fontSize:14, fontWeight:'600', textTransform:'uppercase', marginHorizontal:16, marginBottom:4 }}>Ciudad</Text>
             <View style={{ paddingHorizontal:16, marginBottom:8, flexDirection:'row', alignItems:'center' }}>
               <Pressable onPress={()=> setShowCityPicker(v=>!v)} style={{ backgroundColor: theme.colors.card, borderRadius:16, paddingHorizontal:12, paddingVertical:8, marginRight:8, borderWidth:1, borderColor: theme.colors.border }}>
                 <Text style={{ color: theme.colors.text }}>{ selectedCityId==='all'? 'Todas las ciudades' : (cities?.find(c=>c.id===selectedCityId)?.name || 'Ciudad') }</Text>
@@ -301,6 +344,7 @@ export default function Events(){
               </View>
             )}
             {/* Búsqueda */}
+            <Text style={{ color: theme.colors.textDim, fontSize:14, fontWeight:'600', textTransform:'uppercase', marginHorizontal:16, marginBottom:4 }}>Búsqueda</Text>
             <TextInput
               placeholder="Buscar evento, local o ciudad..."
               value={search}
@@ -309,6 +353,7 @@ export default function Events(){
               placeholderTextColor={theme.colors.textDim}
             />
             {/* Scope */}
+            <Text style={{ color: theme.colors.textDim, fontSize:14, fontWeight:'600', textTransform:'uppercase', marginHorizontal:16, marginBottom:4 }}>Contenido</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingHorizontal:16, marginBottom:8 }} contentContainerStyle={{ alignItems:'center' }}>
               {[{id:'all',label:'Todo'},{id:'series',label:'Locales'},{id:'events',label:'Eventos'}].map(sc=> (
                 <Pressable key={sc.id} onPress={()=> setFeedScope(sc.id as any)} style={{ backgroundColor: feedScope===sc.id? theme.colors.primary : theme.colors.card, paddingHorizontal:14, paddingVertical:6, borderRadius:18, marginRight:8, borderWidth:1, borderColor: feedScope===sc.id? theme.colors.primary: theme.colors.border }}>
@@ -317,6 +362,7 @@ export default function Events(){
               ))}
             </ScrollView>
             {/* Rango temporal */}
+            <Text style={{ color: theme.colors.textDim, fontSize:14, fontWeight:'600', textTransform:'uppercase', marginHorizontal:16, marginBottom:4 }}>Rango temporal</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingHorizontal:16, marginBottom:8 }} contentContainerStyle={{ alignItems:'center' }}>
               {(['today','7','30','all'] as FilterRange[]).map(r=> (
                 <Pressable key={r} onPress={()=> setRange(r)} style={{ backgroundColor: range===r? theme.colors.primary: theme.colors.card, paddingHorizontal:12, paddingVertical:6, borderRadius:16, marginRight:8, borderWidth:1, borderColor: range===r? theme.colors.primary: theme.colors.border }}>
@@ -354,7 +400,6 @@ export default function Events(){
               city={next.city}
               venueType={s.series.venue?.venue_type}
               nextDateISO={next.start_at}
-              totalFuture={s.totalFutureOccurrences}
               weekDaysLabel={s.weekDaysLabel}
               sponsored={s.sponsored}
               expanded={expandedSeriesIds.has(s.series.id)}
@@ -366,7 +411,7 @@ export default function Events(){
               togglingIds={toggling}
               onToggleExpand={()=> setExpandedSeriesIds(prev=>{ const n=new Set(prev); n.has(s.series.id)? n.delete(s.series.id): n.add(s.series.id); return n; })}
               onToggleGoing={(eid, g)=> toggleGoing(eid, g)}
-              onOpenOccurrence={(id)=> openEventSheet(id)}
+              onOpenOccurrence={(id)=> {/* detalle desactivado */}}
               onOpenAttendees={(id)=> openAttendeesSheet(id)}
               onSeeAllOccurrences={(sid)=> router.push(`/events/series/${sid}`)}
             />
@@ -385,12 +430,11 @@ export default function Events(){
               sponsored={e.sponsored}
               toggling={toggling.has(e.ev.id)}
               onToggleGoing={(id, g)=> toggleGoing(id, g)}
-              onOpen={(id)=> openEventSheet(id)}
+              onOpen={(id)=> {/* detalle desactivado */}}
               onOpenAttendees={(id)=> openAttendeesSheet(id)}
             />
         }}
       />
-      <EventDetailSheet />
       <AttendeesSheet />
     </Screen>
   );
@@ -398,7 +442,6 @@ export default function Events(){
 
 // Top de hoy (reintroducido simplificado)
 function TodayTopSection({ items }: { items: RawItem[] }){
-  const openEventSheet = useEventSheetStore(s=>s.openWith);
   // We could enrich with presence RPC here; placeholder sorts by sponsoredPriority desc then start
   const rows = useMemo(()=>{
     return [...items]
@@ -412,7 +455,7 @@ function TodayTopSection({ items }: { items: RawItem[] }){
       <Text style={{ color: theme.colors.text, fontSize:18, fontWeight:'700', marginHorizontal:16, marginBottom:8 }}>Top de hoy</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingHorizontal:16 }}>
         {rows.map(r=> (
-          <Pressable key={r.id} onPress={()=> openEventSheet((r as EventItem).ev.id)}>
+          <Pressable key={r.id} onPress={()=> {/* detalle desactivado */}}>
             <Card style={{ width:240, marginRight:12 }}>
               <Text style={{ color: theme.colors.text, fontWeight:'700' }} numberOfLines={1}>{(r as EventItem).ev.title}</Text>
               <Text style={{ color: theme.colors.textDim, marginTop:4 }}>{(r as EventItem).ev.city}</Text>

@@ -1,3 +1,4 @@
-// This is aliased to another location when server components are enabled.
-// We use this intermediate file to avoid issues with aliases not applying to package.json main field resolution.
+// Initialize Sentry before everything else
+import './sentry';
+// Then load Expo Router
 import 'expo-router/entry-classic';

@@ -1,17 +1,156 @@
 // app/(tabs)/_layout.tsx
-import React, { useEffect } from 'react';
-import { Tabs } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Tabs, usePathname, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { View, Text } from 'react-native';
+import { View, Text, Image, Pressable } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { theme } from '../../lib/theme';
+import { useThemeMode } from '../../lib/theme-context';
 import { useAuth } from '../../lib/useAuth';
 import { supabase } from '../../lib/supabase';
 
+function LogoTitle() {
+  const { theme: dynTheme } = useThemeMode();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      <Image
+        source={require('../../assets/logotype.png')}
+        style={{ width: 30, height: 30, marginRight: 8, resizeMode: 'contain' }}
+      />
+      <Text
+        style={{
+          fontSize: 20,
+          fontWeight: '800',
+          color: dynTheme.colors.text,
+          letterSpacing: 1,
+        }}
+      >
+        WISPIC
+      </Text>
+    </View>
+  );
+}
+
 export default function TabLayout() {
   const { user } = useAuth();
+  const { theme: dynTheme } = useThemeMode();
+  const pathname = usePathname();
+  const router = useRouter();
+  const [eventTitleCache, setEventTitleCache] = useState<Record<string,string>>({});
+  const [pendingEventId, setPendingEventId] = useState<string | null>(null);
+
+  // Detect numeric event id in feed swipe route: /feed/{id}
+  useEffect(() => {
+    const parts = pathname.split('/').filter(Boolean);
+    if (parts.length === 2 && parts[0] === 'feed') {
+      const maybeId = parts[1];
+      if (/^\d+$/.test(maybeId) && !eventTitleCache[maybeId]) {
+        setPendingEventId(maybeId);
+      }
+    } else {
+      setPendingEventId(null);
+    }
+  }, [pathname, eventTitleCache]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!pendingEventId) return;
+      try {
+        const { data, error } = await supabase
+          .from('events')
+          .select('id,title')
+          .eq('id', Number(pendingEventId))
+          .maybeSingle();
+        if (!cancelled && data && !error) {
+          setEventTitleCache(prev => ({ ...prev, [pendingEventId]: data.title || `Evento ${pendingEventId}` }));
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [pendingEventId]);
+
+  // Determine if current path is a root tab (single segment among allowed)
+  const { headerVariant, isRootTab } = useMemo(() => {
+    if (!pathname) return { headerVariant: 'brand', isRootTab: true } as const;
+    const segments = pathname.split('/').filter(Boolean);
+    const ROOT_TABS = ['events','feed','chat','profile'];
+    const isRoot = segments.length === 1 && ROOT_TABS.includes(segments[0]);
+    return { headerVariant: isRoot ? 'brand' : 'sub', isRootTab: isRoot } as const;
+  }, [pathname]);
+
+  const derivedTitle = useMemo(() => {
+    if (headerVariant === 'brand') return <LogoTitle />;
+    // For now basic mapping: show capitalized second segment
+    const parts = pathname.split('/').filter(Boolean);
+    const leaf = parts[parts.length - 1];
+    // Simple heuristics
+    if (/^\d+$/.test(leaf)) {
+      if (parts.includes('events')) return 'Evento';
+      if (parts.length === 2 && parts[0] === 'feed') {
+        return eventTitleCache[leaf] || 'Evento';
+      }
+    }
+    if (parts.includes('chat')) return 'Chat';
+    return leaf.replace(/[-_]/g, ' ').replace(/^(\w)/, c => c.toUpperCase());
+  }, [headerVariant, pathname, eventTitleCache]);
+
+  const isSwipeEvent = useMemo(() => {
+    const parts = pathname.split('/').filter(Boolean);
+    return parts.length === 2 && parts[0] === 'feed' && /^\d+$/.test(parts[1]);
+  }, [pathname]);
+
+  const headerTitleComponent = headerVariant === 'brand' ? () => derivedTitle as any : () => {
+    const inner = (
+      <Text style={{ fontSize: 17, fontWeight: '700', color: dynTheme.colors.text }} numberOfLines={1}>
+        {derivedTitle as any}
+      </Text>
+    );
+    if (isSwipeEvent) {
+      return (
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Volver"
+          style={{ flexDirection:'row', alignItems:'center' }}
+        >
+          {inner}
+        </Pressable>
+      );
+    }
+    return inner;
+  };
+
+  // Back button sólo en rutas sub (no en brand)
+  const headerLeftComponent = headerVariant === 'sub' ? () => (
+    <Pressable onPress={() => router.back()} style={{ paddingHorizontal: 4, paddingVertical: 4 }}>
+      <Ionicons name="chevron-back" size={24} color={dynTheme.colors.text} />
+    </Pressable>
+  ) : undefined;
+
+  // headerRight: sólo logout en profile root (sin placeholder, ya que pedimos títulos a la izquierda)
+  const headerRightComponent = (() => {
+    if (headerVariant !== 'brand') return undefined;
+    const first = pathname.split('/').filter(Boolean)[0] || '';
+    if (first === 'profile') {
+      return () => (
+        <Pressable
+          accessibilityLabel="Cerrar sesión"
+          onPress={async () => {
+            try { await supabase.auth.signOut(); router.replace('/(auth)/sign-in'); } catch {}
+          }}
+          style={{ paddingHorizontal:12, paddingVertical:6, borderRadius:18, flexDirection:'row', alignItems:'center', gap:6, backgroundColor: dynTheme.colors.card, borderWidth:1, borderColor: dynTheme.colors.border }}
+        >
+          <Ionicons name="log-out-outline" size={18} color={dynTheme.colors.text} />
+          <Text style={{ color: dynTheme.colors.text, fontWeight:'700', fontSize:13 }}>Cerrar sesión</Text>
+        </Pressable>
+      );
+    }
+    return undefined;
+  })();
 
   const { data: unreadCount = 0, refetch } = useQuery({
     enabled: !!user,
@@ -49,11 +188,17 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: theme.colors.primary,
+        headerShown: true,
+        headerTitle: headerTitleComponent,
+        headerLeft: headerLeftComponent,
+        headerRight: headerRightComponent,
+        headerStyle: { backgroundColor: dynTheme.colors.bgAlt },
+        headerShadowVisible: false,
+  headerTitleAlign: 'left',
+        tabBarActiveTintColor: dynTheme.colors.primary,
         tabBarStyle: {
-          backgroundColor: theme.colors.bg,
-          borderTopColor: theme.colors.border,
+          backgroundColor: dynTheme.colors.bg,
+          borderTopColor: dynTheme.colors.border,
         },
         tabBarLabelStyle: { fontWeight: '700' },
       }}

@@ -14,8 +14,7 @@ Este documento explica cómo integrar las nuevas interfaces de usuario mejoradas
 3. **Login moderno**:
    - Archivo: `app/(auth)/sign-in-modern.tsx`
 
-4. **Feed estilo Tinder**:
-   - Archivo: `app/(tabs)/feed/tinder-style.tsx`
+4. (Retirado) Feed estilo Tinder: eliminado del repositorio para simplificar la migración.
 
 ## Integración paso a paso
 

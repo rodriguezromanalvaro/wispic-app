@@ -46,7 +46,18 @@ export const AttendeesSheet: React.FC = () => {
     }
   });
 
-  const sorted = useMemo(() => (data || []).sort((a,b)=> (a.display_name||'').localeCompare(b.display_name||'')), [data]);
+  const attendees = useMemo(() => {
+    const base = (data || []).map(u => ({
+      ...u,
+      isMe: user?.id === u.id,
+      displayLabel: user?.id === u.id ? 'Tú' : (u.display_name || 'Sin nombre')
+    }));
+    return base.sort((a,b) => {
+      if(a.isMe && !b.isMe) return -1; // yo primero
+      if(b.isMe && !a.isMe) return 1;
+      return a.displayLabel.localeCompare(b.displayLabel);
+    });
+  }, [data, user?.id]);
 
   return (
     <Modal
@@ -67,33 +78,36 @@ export const AttendeesSheet: React.FC = () => {
           <ActivityIndicator color={theme.colors.primary} style={{ marginTop:16 }} />
         ) : error ? (
           <Text style={{ color: theme.colors.danger }}>Error al cargar asistentes</Text>
-        ) : sorted.length === 0 ? (
+        ) : attendees.length === 0 ? (
           <Text style={{ color: theme.colors.textDim }}>Aún no hay asistentes apuntados.</Text>
         ) : (
           <FlatList
-            data={sorted}
+            data={attendees}
             keyExtractor={u=>u.id}
             style={{ maxHeight: 260 }}
-            renderItem={({ item }) => (
-              <View style={{ flexDirection:'row', alignItems:'center', paddingVertical:6 }}>
-                <View style={{ width:36, height:36, borderRadius:18, backgroundColor: theme.colors.bgAlt, overflow:'hidden', justifyContent:'center', alignItems:'center', marginRight:10, borderWidth:1, borderColor: theme.colors.border }}>
-                  {item.avatar_url ? (
-                    <Image source={{ uri: item.avatar_url }} style={{ width: '100%', height: '100%' }} />
-                  ) : (
-                    <Text style={{ color: theme.colors.text, fontWeight:'700' }}>{(item.display_name||'?').charAt(0).toUpperCase()}</Text>
+            renderItem={({ item }) => {
+              const isMe = (item as any).isMe;
+              return (
+                <View style={{ flexDirection:'row', alignItems:'center', paddingVertical:6 }}>
+                  <View style={{ width:36, height:36, borderRadius:18, backgroundColor: theme.colors.bgAlt, overflow:'hidden', justifyContent:'center', alignItems:'center', marginRight:10, borderWidth:1, borderColor: theme.colors.border }}>
+                    {item.avatar_url ? (
+                      <Image source={{ uri: item.avatar_url }} style={{ width: '100%', height: '100%' }} />
+                    ) : (
+                      <Text style={{ color: theme.colors.text, fontWeight:'700' }}>{(item.displayLabel||'?').charAt(0).toUpperCase()}</Text>
+                    )}
+                  </View>
+                  <Text style={{ color: theme.colors.text, flex:1 }} numberOfLines={1}>{(item as any).displayLabel}</Text>
+                  {isMe && (
+                    <View style={{ backgroundColor: theme.colors.primary, paddingHorizontal:8, paddingVertical:4, borderRadius:12, marginLeft:8 }}>
+                      <Text style={{ color: theme.colors.white, fontSize:11, fontWeight:'700' }}>Tú</Text>
+                    </View>
                   )}
                 </View>
-                <Text style={{ color: theme.colors.text, flex:1 }} numberOfLines={1}>{item.display_name || 'Sin nombre'}</Text>
-              </View>
-            )}
+              );
+            }}
           />
         )}
-        <Pressable
-          onPress={() => { if(eventId){ close(); router.push(`/events/people?eventId=${eventId}`);} }}
-          style={{ marginTop:4, alignSelf:'flex-start', paddingHorizontal:14, paddingVertical:10, borderRadius:20, backgroundColor: theme.colors.primary }}
-        >
-          <Text style={{ color: theme.colors.primaryText, fontWeight:'600' }}>Ver todos y acciones →</Text>
-        </Pressable>
+        {/* CTA legacy eliminado para reducir ruido */}
       </View>
     </Modal>
   );

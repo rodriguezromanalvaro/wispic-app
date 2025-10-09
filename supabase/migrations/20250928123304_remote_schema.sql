@@ -70,7 +70,7 @@ CREATE TABLE public.event_rsvps (
   user_id uuid NOT NULL,
   status text NOT NULL DEFAULT 'going'::text CHECK (status = ANY (ARRAY['going'::text, 'cancelled'::text])),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT event_rsvps_pkey PRIMARY KEY (occurrence_id, user_id),
+  CONSTRAINT event_rsvps_pkey PRIMARY KEY (user_id, occurrence_id),
   CONSTRAINT event_rsvps_occurrence_id_fkey FOREIGN KEY (occurrence_id) REFERENCES public.event_occurrences(id)
 );
 CREATE TABLE public.event_series (
@@ -185,7 +185,7 @@ CREATE TABLE public.opening_schedules (
 CREATE TABLE public.profile_interests (
   profile_id uuid NOT NULL,
   interest_id bigint NOT NULL,
-  CONSTRAINT profile_interests_pkey PRIMARY KEY (interest_id, profile_id),
+  CONSTRAINT profile_interests_pkey PRIMARY KEY (profile_id, interest_id),
   CONSTRAINT profile_interests_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES auth.users(id),
   CONSTRAINT profile_interests_interest_id_fkey FOREIGN KEY (interest_id) REFERENCES public.interests(id)
 );
@@ -274,7 +274,7 @@ CREATE TABLE public.prompt_interactions (
 CREATE TABLE public.prompt_template_categories (
   template_id bigint NOT NULL,
   category_id bigint NOT NULL,
-  CONSTRAINT prompt_template_categories_pkey PRIMARY KEY (template_id, category_id),
+  CONSTRAINT prompt_template_categories_pkey PRIMARY KEY (category_id, template_id),
   CONSTRAINT prompt_template_categories_template_id_fkey FOREIGN KEY (template_id) REFERENCES public.profile_prompt_templates(id),
   CONSTRAINT prompt_template_categories_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.prompt_categories(id)
 );
@@ -306,7 +306,7 @@ CREATE TABLE public.superlike_counters (
   user_id uuid NOT NULL,
   day date NOT NULL,
   used integer NOT NULL DEFAULT 0,
-  CONSTRAINT superlike_counters_pkey PRIMARY KEY (day, user_id),
+  CONSTRAINT superlike_counters_pkey PRIMARY KEY (user_id, day),
   CONSTRAINT superlike_counters_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.user_achievements (

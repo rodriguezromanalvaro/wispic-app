@@ -18,13 +18,8 @@ npx expo install expo-linear-gradient expo-blur expo-haptics react-native-reanim
 - Soporte para login social (Google, Apple)
 - Interfaz de pestañas con indicador animado
 
-### 2. Feed estilo Tinder
-**Archivo:** `app/(tabs)/feed/tinder-style.tsx`
-- Tarjetas de perfil con gestos de deslizamiento fluidos
-- Animaciones de like, dislike y superlike
-- Feedback háptico al deslizar tarjetas
-- Indicadores visuales de decisión (corazón, X)
-- Transiciones suaves entre tarjetas
+### 2. (Retirado) Feed estilo Tinder
+Esta versión experimental ha sido eliminada. El feed actual integra la lógica consolidada; mantener referencias limpias evita duplicidad y confusión.
 
 ### 3. Perfil Moderno
 **Archivo:** `app/(tabs)/profile/modern-profile.tsx`
@@ -65,16 +60,10 @@ Se ha adoptado un enfoque de implementación progresiva donde las nuevas interfa
 
 Ejemplo de uso de pantalla moderna en router:
 ```tsx
-// En app/(tabs)/_layout.tsx o similar
-import TinderStyleFeed from './feed/tinder-style';
+// Ejemplo actual sin el feed tinder-style retirado
 import ModernChat from './chat/modern-chat';
 import ModernProfile from './profile/modern-profile';
-
-// ... dentro del componente de Tabs
-<Tab.Screen
-  name="feed"
-  component={TinderStyleFeed} // Usa la versión mejorada
-/>
+// <Tab.Screen name="feed" component={FeedActual} />
 ```
 
 ## Mejoras adicionales

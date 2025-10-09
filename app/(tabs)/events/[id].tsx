@@ -4,11 +4,11 @@ import { Alert, ActivityIndicator, Text, View, ScrollView } from 'react-native';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../lib/useAuth';
 import { Screen, Card, Button } from '../../../components/ui';
-import TopBar from '../../../components/TopBar';
 import { theme } from '../../../lib/theme';
 import { useQueryClient } from '@tanstack/react-query';
 import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
 import { GradientScaffold } from '../../../features/profile/components/GradientScaffold';
+import { useAttendeesSheetStore } from '../../../lib/stores/attendeesSheet';
 
 export default function EventDetail() {
   const router = useRouter();
@@ -25,17 +25,17 @@ export default function EventDetail() {
   const eid = Number(id);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       setLoading(true);
-
       // Carga del evento
       const { data: ev, error: e1 } = await supabase
         .from('events')
         .select('*')
         .eq('id', eid)
         .maybeSingle();
-      if (e1) console.warn('Error loading event:', e1);
-      setEvent(ev || null);
+      if (e1) console.warn('[event detail] Error loading event:', e1);
+      if (!cancelled) setEvent(ev || null);
 
       // ¿Estoy apuntado?
       if (user) {
@@ -46,42 +46,14 @@ export default function EventDetail() {
           .eq('user_id', user.id)
           .eq('status', 'going')
           .maybeSingle();
-        setGoing(!!att);
+        if (!cancelled) setGoing(!!att);
       }
 
-      setLoading(false);
+      // (Opcional) futuro: cargar métricas de presencia de otra tabla/view.
+      if (!cancelled) setLoading(false);
     })();
+    return () => { cancelled = true; };
   }, [eid, user?.id]);
-
-  // Carga de presencia agregada (RPC)
-  useEffect(() => {
-    let alive = true;
-    const loadPresence = async () => {
-      const { data, error } = await supabase
-        .rpc('get_event_presence', { event_ids: [eid], recent_minutes: 90 });
-      if (!alive) return;
-      if (error) {
-        console.warn('presence error', error);
-        setPresence(null);
-      } else if (Array.isArray(data) && data.length > 0) {
-        const row = data[0];
-        setPresence({
-          verified_count: row.verified_count ?? 0,
-          manual_count: row.manual_count ?? 0,
-          present_count: Number(row.present_count ?? 0),
-          last_sample_at: row.last_sample_at ?? null,
-        });
-      } else {
-        setPresence({ verified_count: 0, manual_count: 0, present_count: 0, last_sample_at: null });
-      }
-    };
-    loadPresence();
-    const t = setInterval(loadPresence, 60 * 1000); // refresco cada minuto
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
-  }, [eid]);
 
   const presenceLabel = useMemo(() => {
     const pc = presence?.present_count ?? 0;
@@ -151,15 +123,13 @@ export default function EventDetail() {
     }
   };
 
-  const scrollY = useSharedValue(0);
-  const onScroll = useAnimatedScrollHandler({ onScroll: (e) => { scrollY.value = e.contentOffset.y; } });
+  const onScroll = useAnimatedScrollHandler({ onScroll: () => {} });
 
   if (loading) {
     return (
       <Screen style={{ padding:0 }}>
         <GradientScaffold>
-          <TopBar title="Evento" mode="overlay" scrollY={scrollY} />
-          <View style={{ flex:1, paddingTop:120, alignItems:'center' }}>
+          <View style={{ flex:1, paddingTop:16, alignItems:'center' }}>
             <ActivityIndicator style={{ marginTop:40 }} color={theme.colors.primary} />
           </View>
         </GradientScaffold>
@@ -171,8 +141,7 @@ export default function EventDetail() {
     return (
       <Screen style={{ padding:0 }}>
         <GradientScaffold>
-          <TopBar title="Evento" mode="overlay" scrollY={scrollY} />
-          <View style={{ flex:1, paddingTop:120 }}>
+          <View style={{ flex:1, paddingTop:16 }}>
             <Card style={{ margin:16 }}><Text style={{ color: theme.colors.text }}>Evento no encontrado</Text></Card>
           </View>
         </GradientScaffold>
@@ -185,11 +154,10 @@ export default function EventDetail() {
   return (
     <Screen style={{ padding:0 }}>
       <GradientScaffold>
-        <TopBar title="Evento" mode="overlay" scrollY={scrollY} />
         <Animated.ScrollView
           onScroll={onScroll}
           scrollEventThrottle={16}
-          contentContainerStyle={{ paddingTop:120, paddingBottom:64, paddingHorizontal:16, gap: theme.spacing(2) }}
+          contentContainerStyle={{ paddingTop:16, paddingBottom:64, paddingHorizontal:16, gap: theme.spacing(2) }}
           showsVerticalScrollIndicator={false}
         >
       <Card style={{ gap: theme.spacing(1) }}>
@@ -243,7 +211,7 @@ export default function EventDetail() {
           />
           <Button
             title="Ver asistentes"
-            onPress={() => router.push(`/events/people?eventId=${eid}`)}
+            onPress={() => useAttendeesSheetStore.getState().openFor(eid)}
             variant="ghost"
           />
         </View>
