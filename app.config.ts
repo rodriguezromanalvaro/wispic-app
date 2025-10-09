@@ -50,9 +50,9 @@ const config: ExpoConfig = {
      googleServicesFile: './google-services.json',
     adaptiveIcon: {
       // Foreground 1024x1024 con transparencia
-      foregroundImage: './assets/Wispic Adaptative Icon.png',
+      foregroundImage: './assets/adaptive-icon-foreground.png',
       // Background 1080x1080 sin transparencia
-      backgroundImage: './assets/Wispic Background Image.png',
+      backgroundImage: './assets/adaptive-icon-background.png',
     },
     config: {
       googleMaps: {
