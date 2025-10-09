@@ -70,7 +70,6 @@ const config: ExpoConfig = {
     'expo-updates',
     'expo-location',
     'expo-camera',
-    'expo-barcode-scanner',
     'sentry-expo',
     'expo-apple-authentication',
     [
