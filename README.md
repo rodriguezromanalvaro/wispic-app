@@ -138,3 +138,20 @@ Próximas mejoras sugeridas (no incluidas aún):
 5. UI enriquecida para tarjetas de Top (imágenes / gradientes).
 
 Si se rompe la pantalla en el futuro: hacer `git reset --hard baseline-events-restore-2025-10-05` en una rama nueva y re-aplicar cambios.
+
+---
+
+## Prueba rápida de notificaciones push
+
+1. Abre la ruta `/push-test` en el Dev Client (ej.: npx expo start y abre wispic://push-test) para obtener tu Expo Push Token y lanzar una notificación local.
+2. Envía un push remoto desde tu PC usando el token copiado:
+
+	Opcional:
+	```powershell
+	npx ts-node .\scripts\send-push-test.ts <ExpoPushToken>
+	```
+
+Requisitos:
+- `google-services.json` presente y correcto.
+- `app.config.ts` tiene `extra.eas.projectId`.
+- Permiso de notificaciones concedido en el dispositivo (Android 13+ pide POST_NOTIFICATIONS).

@@ -5,7 +5,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useProfile } from '../hooks/useProfile';
 import { useProfileMutations } from '../hooks/useProfileMutations';
 import { Screen } from '../../../components/ui';
-import TopBar from '../../../components/TopBar';
 import { theme } from '../../../lib/theme';
 // import { PhotoCarousel } from '../components/PhotoCarousel';
 import { SectionCard } from '../components/SectionCard';
@@ -37,9 +36,7 @@ import DraggablePhotoGrid from '../components/DraggablePhotoGrid';
 import { EditOrientationSheet } from '../sheets/EditOrientationSheet';
 import { EditSeekingSheet } from '../sheets/EditSeekingSheet';
 import { EditGenderSheet } from '../sheets/EditGenderSheet';
-import { supabase } from '../../../lib/supabase';
-import { Pressable } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+// TopBar eliminado: usamos sólo el header global de tabs
 
 export default function ProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
@@ -58,11 +55,7 @@ export default function ProfileScreen() {
   const [editingPrompt, setEditingPrompt] = useState<any | null>(null);
   // Photo editing no longer needs toggle
   // legacy fade removed (could be reintroduced with Reanimated if needed)
-  // Reanimated scroll value for overlay header shadow
-  const scrollY = useSharedValue(0);
-  const onScroll = useAnimatedScrollHandler({
-    onScroll: (evt) => { scrollY.value = evt.contentOffset.y; }
-  });
+  // Scroll animations para TopBar eliminadas; se podrían reintroducir si se añade un header interno de nuevo
   useEffect(() => {}, [isLoading, data]);
 
   // Appear animation wrapper (staggered)
@@ -139,24 +132,7 @@ export default function ProfileScreen() {
   return (
     <Screen style={{ padding:0 }}>
       <GradientScaffold>
-        <TopBar
-          mode="overlay"
-          title={isOwner ? t('common.myProfile') : t('common.profile')}
-          onBack={() => router.back()}
-          hideBack={false}
-            scrollY={scrollY}
-          avatarUrl={data?.avatar_url || undefined}
-          right={isOwner ? (
-            <Pressable
-              onPress={async () => {
-                try { await supabase.auth.signOut(); router.replace('/(auth)/sign-in'); } catch(e) { /* noop */ }
-              }}
-              style={{ paddingHorizontal:8, paddingVertical:6, borderRadius:16, backgroundColor:'rgba(255,255,255,0.08)', borderWidth:1, borderColor:'rgba(255,255,255,0.15)' }}
-            >
-              <Ionicons name="log-out-outline" size={18} color={theme.colors.text} />
-            </Pressable>
-          ) : null}
-        />
+        {/* TopBar eliminado (sin título ni botones locales) */}
         {(
           isLoading ? (
             <ScrollView contentContainerStyle={styles.loadingContent} showsVerticalScrollIndicator={false}>
@@ -185,7 +161,6 @@ export default function ProfileScreen() {
             <View style={{ padding:40 }}><Text style={styles.empty}>{t('profile.empty','Perfil no encontrado')}</Text></View>
           ) : (
             <Animated.ScrollView
-              onScroll={onScroll}
               scrollEventThrottle={16}
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
@@ -325,8 +300,9 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   empty: { color: theme.colors.text, fontSize:16 },
-  loadingContent: { paddingVertical: 120, gap: 28, paddingHorizontal:20 },
-  scrollContent: { paddingTop: 120, gap: 24, paddingHorizontal:20 },
+  // Ajuste: reducimos el padding superior para subir el conjunto visual
+  loadingContent: { paddingVertical: 80, gap: 28, paddingHorizontal:20 },
+  scrollContent: { paddingTop: 80, gap: 24, paddingHorizontal:20 },
   centerWrap: { width:'100%', maxWidth:480, alignSelf:'center', gap:24 },
   fadeInBlock: { marginTop:4, gap:12 },
   titleName: { fontSize:28, fontWeight:'800', color: theme.colors.white },

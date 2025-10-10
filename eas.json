@@ -11,6 +11,7 @@
       "ios": { "simulator": true },
       "channel": "development",
       "env": {
+        "NODE_ENV": "development",
         "APP_ENV": "development",
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       }
@@ -22,6 +23,7 @@
       "ios": { "simulator": false },
       "channel": "preview",
       "env": {
+        "NODE_ENV": "development",
         "APP_ENV": "development"
       }
     },
@@ -32,6 +34,7 @@
       "ios": { "simulator": false },
       "channel": "production",
       "env": {
+        "NODE_ENV": "production",
         "APP_ENV": "production"
       }
     }

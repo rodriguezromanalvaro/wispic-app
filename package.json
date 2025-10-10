@@ -12,7 +12,9 @@
     "lint": "eslint app components lib --ext .ts,.tsx",
     "test": "jest --passWithNoTests",
     "ci:verify": "node -e \"console.log('CI verify ok')\"",
-    "backfill:cities": "ts-node scripts/backfill-city-coords.ts"
+    "backfill:cities": "ts-node scripts/backfill-city-coords.ts",
+    "eas-build-pre-install": "node scripts/write-google-services.js",
+    "eas-build-pre-build": "node scripts/write-google-services.js"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",

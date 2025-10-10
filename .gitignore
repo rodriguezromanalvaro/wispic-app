@@ -37,6 +37,9 @@ yarn-error.*
 # Supabase config
 supabase/config.toml
 
+# Firebase Android client config (will be injected at build time)
+google-services.json
+
 # typescript
 *.tsbuildinfo
 
