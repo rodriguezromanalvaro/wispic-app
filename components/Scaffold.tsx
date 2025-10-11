@@ -26,12 +26,8 @@ export const CenterScaffold: React.FC<CenterScaffoldProps> = ({ children, varian
       break;
     case 'minimal':
     case 'auth': // auth cae en minimal para no sobrecargar color
-      // Fondo casi plano según modo (usamos tokens gradientTop/Mid/Bottom)
-      if (theme.mode === 'dark') {
-        base = [theme.darkColors.gradientMid, theme.darkColors.gradientMid, theme.darkColors.gradientBottom];
-      } else {
-        base = ['#FFFFFF', '#FFFFFF', '#F5F7FA'];
-      }
+      // Fondo casi plano según modo
+      base = theme.mode === 'dark' ? theme.gradients.dark : ['#FFFFFF', '#FFFFFF', '#F5F7FA'];
       break;
     case 'brand':
       base = theme.gradients.brand;

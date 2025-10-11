@@ -10,7 +10,7 @@ interface GradientScaffoldProps {
 export const GradientScaffold: React.FC<GradientScaffoldProps> = ({ children }) => {
   return (
     <LinearGradient
-      colors={[theme.colors.gradientTop, theme.colors.gradientMid, theme.colors.gradientBottom]}
+      colors={theme.gradients.dark as [string, string, string]}
       start={{ x: 0.2, y: 0 }}
       end={{ x: 0.8, y: 1 }}
       style={styles.gradient}

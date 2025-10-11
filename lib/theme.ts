@@ -1,69 +1,92 @@
-// Paleta oscura original retenida para usos puntuales o futuros toggles
+// Paleta oscura (coherente con modo oscuro opcional)
 const darkColors = {
-  // Azul más claro y aireado ("Azure Dusk")
-  bg: '#0F1D30',        // Base general
-  bgAlt: '#13263D',     // Header / barras
-  card: '#19324B',      // Cards principales
-  cardAlt: '#1F3C56',   // Cards secundarios
-  surface: 'rgba(255,255,255,0.07)',
-  surfaceAlt: 'rgba(255,255,255,0.12)',
-  overlay: 'rgba(19,38,61,0.55)',
-  border: '#295272',
-  divider: '#254A68',
-  text: '#FFFFFF',
-  subtext: '#D2DEE9',
-  textDim: '#94A9BC',
+  bg: '#111827',
+  bgAlt: '#0B1220',
+  card: '#0B1220',
+  cardAlt: '#111827',
+  surface: 'rgba(255,255,255,0.06)',
+  surfaceAlt: 'rgba(255,255,255,0.1)',
+  overlay: 'rgba(0,0,0,0.55)',
+  border: '#1F2937',
+  divider: '#1F2937',
+  text: '#F3F4F6',
+  subtext: '#9CA3AF',
+  textDim: '#A3AEC2',
   white: '#FFFFFF',
-  primary: '#55A8FF',     // Azul más claro como acción
-  primaryAlt: '#6A7CFF',  // Azul-violeta
-  primaryText: '#0F1D30',
-  secondary: '#9F62FF',   // Violeta claro
-  focus: '#6A7CFF',
-  positive: '#27D6C0',
-  success: '#2EC287',
-  warning: '#FFC55A',
-  danger: '#FF5474',
-  dangerAlt: '#FF7892',
-  gradientTop: '#102036',
-  gradientMid: '#152C45',
-  gradientBottom: '#1D3A55'
+  primary: '#FF6B6B',
+  primaryAlt: '#E11D48',
+  primaryText: '#111827',
+  secondary: '#FFD166',
+  focus: '#FF6B6B',
+  positive: '#10B981',
+  success: '#10B981',
+  warning: '#F59E0B',
+  danger: '#EF4444',
+  dangerAlt: '#F87171',
+  surfaceMuted: '#0B1220'
 };
 
-// Nueva paleta clara "base blanca" más alegre
-const lightColors = {
-  bg: '#F4F8FF',
+// Paleta clara (A) Coral/Peach
+const lightColorsCoral = {
+  bg: '#FFF8F5',
   bgAlt: '#FFFFFF',
   card: '#FFFFFF',
-  cardAlt: '#F2F6FD',
+  cardAlt: '#FFF8F5',
   surface: 'rgba(0,0,0,0.04)',
   surfaceAlt: 'rgba(0,0,0,0.08)',
   overlay: 'rgba(255,255,255,0.55)',
-  border: '#D3DDED',
-  divider: '#E1E8F3',
-  text: '#182235',
-  subtext: '#586482',
-  textDim: '#7C889E',
+  border: '#E5E7EB',
+  divider: '#E5E7EB',
+  text: '#111827',
+  subtext: '#6B7280',
+  textDim: '#6B7280',
   white: '#FFFFFF',
-  primary: '#4D7CFF',
-  primaryAlt: '#825BFF',
+  primary: '#FF6B6B',
+  primaryAlt: '#FFA07A',
   primaryText: '#FFFFFF',
-  secondary: '#C153FF',
-  focus: '#5F74FF',
-  positive: '#18B9A3',
-  success: '#1F9F6C',
-  warning: '#F4B12F',
-  danger: '#E34761',
-  dangerAlt: '#FF6C8F',
-  gradientTop: '#FFFFFF',
-  gradientMid: '#F1F5FF',
-  gradientBottom: '#E0E9FA'
+  secondary: '#FFD166',
+  focus: '#FF6B6B',
+  positive: '#10B981',
+  success: '#10B981',
+  warning: '#F59E0B',
+  danger: '#EF4444',
+  dangerAlt: '#F87171',
+  surfaceMuted: '#FFF8F5'
+};
+
+// Paleta clara (B) Magenta/Fucsia
+const lightColorsMagenta = {
+  bg: '#FFF5F7',
+  bgAlt: '#FFFFFF',
+  card: '#FFFFFF',
+  cardAlt: '#FFF5F7',
+  surface: 'rgba(0,0,0,0.04)',
+  surfaceAlt: 'rgba(0,0,0,0.08)',
+  overlay: 'rgba(255,255,255,0.55)',
+  border: '#E5E7EB',
+  divider: '#E5E7EB',
+  text: '#111827',
+  subtext: '#6B7280',
+  textDim: '#6B7280',
+  white: '#FFFFFF',
+  primary: '#E11D48',
+  primaryAlt: '#A855F7',
+  primaryText: '#FFFFFF',
+  secondary: '#FB7185',
+  focus: '#E11D48',
+  positive: '#10B981',
+  success: '#10B981',
+  warning: '#F59E0B',
+  danger: '#EF4444',
+  dangerAlt: '#F87171',
+  surfaceMuted: '#FFF5F7'
 };
 
 export const theme = {
-  mode: 'dark' as 'light' | 'dark',
-  colors: darkColors,
+  mode: 'light' as 'light' | 'dark',
+  colors: lightColorsCoral,
   darkColors,
-  lightColors,
+  lightColors: lightColorsCoral,
   // Radio principal según guía (16px en cards/botones grandes)
   radius: 16,
   radii: { xs:6, sm:10, md:14, lg:20, pill: 999 },
@@ -85,16 +108,48 @@ export const theme = {
     }
   },
   gradients: {
-    // Azul claro → violeta suave → violeta claro
-    brand: ['#55A8FF', '#6A7CFF', '#9F62FF'],
-    brandSoft: ['rgba(85,168,255,0.25)', 'rgba(159,98,255,0.25)'],
-    positive: ['#27D6C0', '#6A7CFF'],
-    dark: ['#102036', '#152C45', '#1D3A55'],
-    glowTop: ['rgba(85,168,255,0.22)', 'rgba(85,168,255,0)'],
-    glowBottom: ['rgba(159,98,255,0)', 'rgba(159,98,255,0.18)']
+    // Acento Coral/Peach
+    brand: ['#FFA07A', '#FF6B6B'],
+    brandSoft: ['rgba(255,107,107,0.16)', 'rgba(255,107,107,0.06)'],
+    positive: ['#10B981', '#34D399'],
+    dark: ['#0B1220', '#111827'],
+    glowTop: ['rgba(255,107,107,0.16)', 'rgba(255,107,107,0)'],
+    glowBottom: ['rgba(255,107,107,0)', 'rgba(255,107,107,0.14)']
   },
   layout: {
     maxWidth: 480,
     authWidth: 420
   }
 };
+
+// Paletas preparadas para toggling (A/B)
+export const palettes = {
+  coral: {
+    colors: lightColorsCoral,
+    gradients: {
+      brand: ['#FFA07A', '#FF6B6B'] as [string, string],
+      brandSoft: ['rgba(255,107,107,0.16)', 'rgba(255,107,107,0.06)'] as [string, string],
+    }
+  },
+  magenta: {
+    colors: lightColorsMagenta,
+    gradients: {
+      brand: ['#FF4D8D', '#A855F7'] as [string, string],
+      brandSoft: ['rgba(225,29,72,0.16)', 'rgba(168,85,247,0.08)'] as [string, string],
+    }
+  }
+} as const;
+
+// Helper opcional para cambiar de paleta en runtime (simple mutación)
+export function applyPalette(name: keyof typeof palettes) {
+  const p = palettes[name];
+  if (!p) return;
+  // mutamos referencias usadas por la app
+  (theme as any).colors = p.colors;
+  (theme as any).lightColors = p.colors;
+  (theme as any).gradients = {
+    ...theme.gradients,
+    brand: p.gradients.brand,
+    brandSoft: p.gradients.brandSoft,
+  } as any;
+}

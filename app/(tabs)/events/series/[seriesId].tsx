@@ -109,7 +109,10 @@ export default function SeriesDetails() {
         <Card style={{ marginHorizontal: 16, marginBottom: 12 }}>
           <Text style={{ color: theme.colors.text, fontWeight: '700', marginBottom: 4 }}>Esta semana</Text>
           {weekEvents.map(ev => (
-            <Pressable key={ev.id} onPress={() => router.push(`/events/${ev.id}`)}>
+            <Pressable
+              key={ev.id}
+              onPress={() => router.push({ pathname: '/(tabs)/feed/[eventId]', params: { eventId: String(ev.id) } })}
+            >
               <View style={{ paddingVertical: 4 }}>
                 <Text style={{ color: theme.colors.text }}>{new Date(ev.start_at).toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' })} · {ev.title}</Text>
               </View>
@@ -125,7 +128,7 @@ export default function SeriesDetails() {
         onRefresh={refetch}
         contentContainerStyle={{ paddingBottom: theme.spacing(2) }}
         renderItem={({ item: ev }) => (
-          <Pressable onPress={() => router.push(`/events/${ev.id}`)}>
+          <Pressable onPress={() => router.push({ pathname: '/(tabs)/feed/[eventId]', params: { eventId: String(ev.id) } })}>
             <Card style={{ marginHorizontal: 16, marginBottom: 12 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
                 <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: 'bold' }}>

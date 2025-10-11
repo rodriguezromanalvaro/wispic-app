@@ -203,3 +203,70 @@ export const Divider: React.FC<{ inset?: boolean; style?: any }> = ({ inset, sty
     ]}
   />
 );
+
+// Progress bar superior con gradiente brand
+export const ProgressBar: React.FC<{ progress: number; style?: any }> = ({ progress, style }) => (
+  <View style={[{ height: 4, backgroundColor: theme.colors.border, borderRadius: 999, overflow: 'hidden' }, style]}>
+    <LinearGradient
+      colors={theme.gradients.brand as [string, string]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 0 }}
+      style={{ width: `${Math.max(0, Math.min(100, progress * 100))}%`, height: '100%' }}
+    />
+  </View>
+);
+
+// Tile de selección accesible: activo con fondo surfaceMuted y borde 2px primary
+export const SelectionTile: React.FC<{
+  active?: boolean;
+  label: string;
+  onPress?: () => void;
+  rightAdornment?: React.ReactNode;
+  style?: any;
+}> = ({ active, label, onPress, rightAdornment, style }) => (
+  <Pressable
+    onPress={onPress}
+    style={[
+      {
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        borderRadius: theme.radius,
+        borderWidth: active ? 2 : 1,
+        borderColor: active ? theme.colors.primary : theme.colors.border,
+        backgroundColor: active ? (theme.colors as any).surfaceMuted || theme.colors.card : theme.colors.card,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+      },
+      style,
+    ]}
+  >
+    <Text style={[typography.scale.body, { color: theme.colors.text }]}>{label}</Text>
+    {rightAdornment ?? (
+      <View
+        style={{
+          width: 22,
+          height: 22,
+          borderRadius: 999,
+          borderWidth: 2,
+          borderColor: theme.colors.text,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: active ? theme.colors.text : 'transparent',
+        }}
+      />
+    )}
+  </Pressable>
+);
+
+// Footer fijo con CTA primario
+export const StickyFooterCTA: React.FC<{
+  title: string;
+  onPress: () => void;
+  disabled?: boolean;
+  style?: any;
+}> = ({ title, onPress, disabled, style }) => (
+  <View style={[{ padding: theme.spacing(2), backgroundColor: theme.colors.bg }, style]}>
+    <Button title={title} onPress={onPress} disabled={disabled} />
+  </View>
+);

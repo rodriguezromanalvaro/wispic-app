@@ -11,9 +11,17 @@
     "allowJs": false,
     "jsx": "react-jsx",
   "types": ["expo", "node", "jest"],
-    "baseUrl": "."
+    "baseUrl": ".",
+    "paths": {
+      "lib/*": ["lib/*"],
+      "components/*": ["components/*"],
+      "features/*": ["features/*"],
+      "app/*": ["app/*"]
+    }
   },
   "include": [
+    "*.ts",
+    "*.tsx",
     "app/**/*.ts",
     "app/**/*.tsx",
     "components/**/*.ts",

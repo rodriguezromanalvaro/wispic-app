@@ -16,8 +16,8 @@ function LogoTitle() {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
       <Image
-        source={require('../../assets/logotype.png')}
-        style={{ width: 30, height: 30, marginRight: 8, resizeMode: 'contain' }}
+        source={require('../../assets/adaptive-icon-foreground.png')}
+        style={{ width: 24, height: 24, marginRight: 8, resizeMode: 'contain' }}
       />
       <Text
         style={{

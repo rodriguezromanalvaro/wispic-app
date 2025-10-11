@@ -1,5 +1,6 @@
 // app.config.ts
 import { ExpoConfig } from 'expo/config';
+import fs from 'fs';
 
 const config: ExpoConfig = {
   name: 'Wispic',
@@ -47,8 +48,8 @@ const config: ExpoConfig = {
       'ACCESS_BACKGROUND_LOCATION',
       'CAMERA',
       'POST_NOTIFICATIONS',
-    ],
-     googleServicesFile: './google-services.json',
+  ],
+  ...(fs.existsSync('./google-services.json') ? { googleServicesFile: './google-services.json' } : {}),
     adaptiveIcon: {
       // Foreground 1024x1024 con transparencia
       foregroundImage: './assets/adaptive-icon-foreground.png',

@@ -101,7 +101,7 @@ export default function SignIn() {
           <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {/* Branding */}
         <View style={styles.header}>
-          <Image source={require('../../assets/logotype.png')} style={styles.logo} resizeMode="contain" />
+          <Image source={require('../../assets/adaptive-icon-foreground.png')} style={styles.logo} resizeMode="contain" />
         </View>
 
         <View style={styles.center}>
@@ -210,8 +210,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   logo: {
-    width: 160,
-    height: 48,
+    width: 72,
+    height: 72,
   },
   center: {
     flex: 1,
@@ -220,13 +220,13 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   title: {
-    color: '#FFFFFF',
+    color: theme.colors.text,
     fontSize: 30,
     fontWeight: '800',
     textAlign: 'center',
   },
   subtitle: {
-    color: '#D0D5DD',
+    color: theme.colors.subtext,
     fontSize: 16,
     textAlign: 'center',
     marginHorizontal: 12,
@@ -237,12 +237,12 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     padding: theme.spacing(2),
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: theme.colors.card,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
+    borderColor: theme.colors.border,
   },
   label: {
-    color: '#E6EAF2',
+    color: theme.colors.textDim,
     marginBottom: 6,
   },
   input: {
@@ -256,10 +256,10 @@ const styles = StyleSheet.create({
   divider: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: '#475467',
+    backgroundColor: theme.colors.divider,
   },
   dividerText: {
-    color: '#98A2B3',
+    color: theme.colors.textDim,
   },
   socialBtn: {
     height: 48,
@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   haveAccount: {
-    color: '#667085',
+    color: theme.colors.textDim,
     textAlign: 'center',
   },
 });
