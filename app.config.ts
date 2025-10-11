@@ -48,6 +48,8 @@ const config: ExpoConfig = {
       'ACCESS_BACKGROUND_LOCATION',
       'CAMERA',
       'POST_NOTIFICATIONS',
+      // Android 13+ granular media permission for images/photos
+      'READ_MEDIA_IMAGES',
   ],
   ...(fs.existsSync('./google-services.json') ? { googleServicesFile: './google-services.json' } : {}),
     adaptiveIcon: {

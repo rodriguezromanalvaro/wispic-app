@@ -153,7 +153,7 @@ export default function StepSummary() {
               )}
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
                 <Button title={t('common.back')} variant="ghost" onPress={() => router.push('(auth)/complete/photos' as any)} />
-                <Button title={t('common.saveContinue')} onPress={async () => { const ok = await saveToSupabase(); if (ok) { Alert.alert(t('complete.savedTitle'), t('complete.savedBody')); router.replace('/(tabs)/profile'); } }} />
+                <Button title={t('common.saveContinue')} onPress={async () => { const ok = await saveToSupabase(); if (ok) { Alert.alert(t('complete.savedTitle'), t('complete.savedBody')); router.replace('(auth)/complete/post-save' as any); } }} />
               </View>
             </Card>
           </ScrollView>

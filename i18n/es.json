@@ -84,11 +84,11 @@
     "prompts.title": "Prompts",
     "prompts.addPlaceholder": "Añade un prompt",
     "prompts.addCta": "+ Añadir",
-  "prompts.unanswered": "Sin respuesta",
-  "prompts.answerCta": "Responder",
-  "prompts.deleted": "Respuesta eliminada",
-  "prompts.updated": "Respuesta actualizada",
-  "prompts.saved": "Respuesta guardada",
+    "prompts.unanswered": "Sin respuesta",
+    "prompts.answerCta": "Responder",
+    "prompts.deleted": "Respuesta eliminada",
+    "prompts.updated": "Respuesta actualizada",
+    "prompts.saved": "Respuesta guardada",
     "completion.title": "Completitud del perfil",
     "completion.missingOne": "1 campo faltante",
     "completion.missingMany": "{{count}} campos faltantes",
@@ -114,10 +114,9 @@
     "close": "Cerrar",
     "typeAnswer": "Escribe tu respuesta",
     "premium": "Premium",
-    "verified": "Verificado"
-    ,"hidden": "Oculto"
-  }
-  ,
+    "verified": "Verificado",
+    "hidden": "Oculto"
+  },
   "auth": {
     "google": "Google",
     "apple": "Apple",
@@ -148,5 +147,41 @@
     "lower": "Al menos una minúscula",
     "digit": "Al menos un número",
     "sym": "Al menos un símbolo"
+  },
+  "welcome": {
+    "title": "¡Te damos la bienvenida!",
+    "subtitle": "Vamos a configurar tu perfil en unos pasos rápidos.",
+    "body": "Te pediremos algunos datos básicos, preferencias y una foto para empezar.",
+    "cta": "Empezar"
+  },
+  "relationship": {
+    "title": "¿Cuál es tu situación?",
+    "subtitle": "Nos ayuda a ajustar tus recomendaciones.",
+    "single": "Soltero/a",
+    "inRelationship": "En una relación",
+    "open": "Relación abierta",
+    "itsComplicated": "Es complicado",
+    "preferNot": "Prefiero no decirlo"
+  },
+  "permissions": {
+    "title": "¡No te pierdas nada!",
+    "subtitle": "Elige qué permisos y notificaciones quieres permitir",
+    "msgTitle": "Mensajes",
+    "msgDesc": "Recibe notificaciones cuando alguien te envíe un mensaje",
+    "likesTitle": "Likes y Matches",
+    "likesDesc": "Recibe notificaciones cuando recibas un like o hagas match",
+    "friendsTitle": "Solicitudes de amistad",
+    "friendsDesc": "Recibe notificaciones de solicitudes de amistad",
+    "locationTitle": "Ubicación",
+    "locationDesc": "Mejora resultados cercanos al permitir acceso a tu ubicación",
+    "requestPush": "Permitir notificaciones",
+    "requestLocation": "Permitir ubicación",
+    "requestCamera": "Permitir cámara/fotos"
+  },
+  "postsave": {
+    "title": "¡Tu perfil está listo!",
+    "subtitle": "Puedes ir a la app o seguir personalizando con texto y preguntas opcionales.",
+    "goApp": "Ir a la app",
+    "keepImproving": "Seguir con el perfil"
   }
 }

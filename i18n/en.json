@@ -84,11 +84,11 @@
     "prompts.title": "Prompts",
     "prompts.addPlaceholder": "Add a prompt",
     "prompts.addCta": "+ Add",
-  "prompts.unanswered": "Unanswered",
-  "prompts.answerCta": "Answer",
-  "prompts.deleted": "Answer deleted",
-  "prompts.updated": "Answer updated",
-  "prompts.saved": "Answer saved",
+    "prompts.unanswered": "Unanswered",
+    "prompts.answerCta": "Answer",
+    "prompts.deleted": "Answer deleted",
+    "prompts.updated": "Answer updated",
+    "prompts.saved": "Answer saved",
     "completion.title": "Profile completion",
     "completion.missingOne": "1 missing field",
     "completion.missingMany": "{{count}} missing fields",
@@ -114,10 +114,9 @@
     "close": "Close",
     "typeAnswer": "Type your answer",
     "premium": "Premium",
-    "verified": "Verified"
-    ,"hidden": "Hidden"
-  }
-  ,
+    "verified": "Verified",
+    "hidden": "Hidden"
+  },
   "auth": {
     "google": "Google",
     "apple": "Apple",
@@ -148,5 +147,41 @@
     "lower": "At least one lowercase letter",
     "digit": "At least one number",
     "sym": "At least one symbol"
+  },
+  "welcome": {
+    "title": "Welcome!",
+    "subtitle": "Let's set up your profile in a few quick steps.",
+    "body": "We'll ask for some basics, preferences and a photo to get started.",
+    "cta": "Get started"
+  },
+  "relationship": {
+    "title": "What's your situation?",
+    "subtitle": "Helps us tune your recommendations.",
+    "single": "Single",
+    "inRelationship": "In a relationship",
+    "open": "Open relationship",
+    "itsComplicated": "It's complicated",
+    "preferNot": "Prefer not to say"
+  },
+  "permissions": {
+    "title": "Don't miss a thing!",
+    "subtitle": "Choose which permissions and notifications to allow",
+    "msgTitle": "Messages",
+    "msgDesc": "Get notified when someone messages you",
+    "likesTitle": "Likes and Matches",
+    "likesDesc": "Get notified on likes and matches",
+    "friendsTitle": "Friend requests",
+    "friendsDesc": "Get notified on friend requests",
+    "locationTitle": "Location",
+    "locationDesc": "Improve nearby results by allowing access to your location",
+    "requestPush": "Allow notifications",
+    "requestLocation": "Allow location",
+    "requestCamera": "Allow camera/photos"
+  },
+  "postsave": {
+    "title": "Your profile is ready!",
+    "subtitle": "Go to the app or keep personalizing with text and optional questions.",
+    "goApp": "Go to the app",
+    "keepImproving": "Keep improving profile"
   }
 }
