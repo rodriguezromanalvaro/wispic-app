@@ -55,6 +55,56 @@ npm start
 
 ---
 
+## Configuración de Storage (fotos de usuario)
+
+Variables de entorno importantes (añádelas en `app.config.ts` -> `extra` para que Expo las exponga con prefijo `EXPO_PUBLIC_`):
+
+- `EXPO_PUBLIC_STORAGE_BUCKET`: (por defecto `user-photos`) Nombre del bucket público donde se suben las fotos de perfil.
+- `EXPO_PUBLIC_DEBUG_UPLOADS`: si = `true` habilita logs detallados de subida en consola (`[storage] ...`). En producción déjalo vacío.
+
+Policies mínimas recomendadas para el bucket (en Supabase → SQL):
+```sql
+-- SELECT público (si quieres que cualquiera vea fotos de perfil)
+create policy "Public user photos"
+on storage.objects for select to public
+using (bucket_id = 'user-photos');
+
+-- INSERT solo para usuarios autenticados
+create policy "Users upload their photos"
+on storage.objects for insert to authenticated
+with check (bucket_id = 'user-photos');
+
+-- UPDATE / DELETE opcional (si quieres permitir reemplazo/eliminación desde app)
+create policy "Users update their photos"
+on storage.objects for update to authenticated
+using (bucket_id = 'user-photos');
+
+create policy "Users delete their photos"
+on storage.objects for delete to authenticated
+using (bucket_id = 'user-photos');
+```
+
+### Flujo de subida actual
+1. Selección multi-foto (galería o cámara) con límite 6.
+2. Ordenación mediante drag & drop (la primera se guarda como `avatar_url`).
+3. Pre-flight bucket.
+4. Compresión / resize (hasta 1600px) si está disponible `expo-image-manipulator`.
+5. Subidas concurrentes (por defecto configuradas a 3) con reintentos exponenciales.
+6. Fallback a cola offline si hay fallo de red (se reintenta al abrir la pantalla de nuevo).
+7. Nombres únicos UUID.
+8. Inserción ordenada en `user_photos` + actualización de `profiles.avatar_url`.
+9. Botón de diagnóstico ("Diag") para inspección rápida.
+
+### Mejoras futuras sugeridas
+- Compresión/resize antes de subir (ej. `expo-image-manipulator`).
+- Ajustar nivel de concurrencia dinámicamente según red.
+- Mini caché local de thumbnails procesados.
+- Limpieza automática de uploads huérfanos (garbage collector de ficheros no referenciados).
+
+---
+
+---
+
 ## Semillas rápidas (opcional)
 Inserta un evento de prueba desde el SQL Editor:
 
@@ -62,3 +112,46 @@ Inserta un evento de prueba desde el SQL Editor:
 insert into public.events (title, description, start_at, venue, city, cover_url)
 values ('Fiesta Techno', 'Viernes noche', now() + interval '2 days', 'Club Neon', 'Madrid', null);
 ```
+
+---
+
+## Baseline de restauración (2025-10-05)
+
+Se restauró la pantalla avanzada de **Eventos** con las siguientes capacidades reintroducidas:
+
+- Agrupación por series (locales) con próxima ocurrencia y lista de occurrences (hasta 8) + indicador de "más".
+- Prioridad de patrocinio combinada (eventos + series) usando tablas `event_sponsorships` y `series_sponsorships`.
+- Cálculo de asistencia: conteo y muestra de hasta 5 avatares (consulta `event_attendance` + `profiles`).
+- Botón real de "Voy" (upsert/delete) con refetch y canal realtime para sincronizar cambios propios.
+- Sección "Top de hoy" (priorizada por sponsoredPriority; placeholder para métrica futura de presencia real).
+- Filtros persistentes: ciudad, rango (hoy/7/30/todos), scope (todo/eventos/locales) y búsqueda textual.
+- Orden global: prioridad de patrocinio desc > hora de inicio.
+- Header overlay con scroll y badges de tipo de venue en tarjetas.
+
+Tag creado: `baseline-events-restore-2025-10-05` (usar como punto seguro para futuras iteraciones).
+
+Próximas mejoras sugeridas (no incluidas aún):
+1. Métrica real de presencia para "Top de hoy".
+2. Infinite scroll/paginación.
+3. Optimistic update en toggle "Voy" (sin refetch completo).
+4. Cache de perfiles y memoización de avatares.
+5. UI enriquecida para tarjetas de Top (imágenes / gradientes).
+
+Si se rompe la pantalla en el futuro: hacer `git reset --hard baseline-events-restore-2025-10-05` en una rama nueva y re-aplicar cambios.
+
+---
+
+## Prueba rápida de notificaciones push
+
+1. Abre la ruta `/push-test` en el Dev Client (ej.: npx expo start y abre wispic://push-test) para obtener tu Expo Push Token y lanzar una notificación local.
+2. Envía un push remoto desde tu PC usando el token copiado:
+
+	Opcional:
+	```powershell
+	npx ts-node .\scripts\send-push-test.ts <ExpoPushToken>
+	```
+
+Requisitos:
+- `google-services.json` presente y correcto.
+- `app.config.ts` tiene `extra.eas.projectId`.
+- Permiso de notificaciones concedido en el dispositivo (Android 13+ pide POST_NOTIFICATIONS).

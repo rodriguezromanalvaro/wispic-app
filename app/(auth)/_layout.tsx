@@ -1,5 +1,4 @@
 import { Stack, useRouter } from 'expo-router';
-import { Pressable, Text } from 'react-native';
 import { supabase } from '../../lib/supabase';
 
 export default function AuthLayout() {
@@ -10,14 +9,8 @@ export default function AuthLayout() {
   };
 
   return (
-    <Stack
-      screenOptions={{
-        headerRight: () => (
-          <Pressable onPress={signOut} style={{ paddingRight: 16 }}>
-            <Text>Salir</Text>
-          </Pressable>
-        ),
-      }}
-    />
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="sign-up" />
+    </Stack>
   );
 }

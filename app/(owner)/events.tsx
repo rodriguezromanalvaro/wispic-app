@@ -1,0 +1,427 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, Pressable, ActivityIndicator, Alert, Platform, ScrollView, Modal } from 'react-native';
+import { theme } from '../../lib/theme';
+import { Screen, H1, P, TextInput, Button, Card, Switch } from '../../components/ui';
+import { RequireOwnerReady } from '../../features/owner/RequireOwnerReady';
+import { useAuth } from '../../lib/useAuth';
+import { supabase } from '../../lib/supabase';
+import { useToast } from '../../lib/toast';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import { decode } from 'base64-arraybuffer';
+import { router } from 'expo-router';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
+import { useQueryClient } from '@tanstack/react-query';
+import ConfettiCannon from 'react-native-confetti-cannon';
+
+type VenueRow = { id: number; name: string; city_id: number };
+
+function buildDateFromParts(dateStr: string, timeStr: string): Date {
+  // Build a local Date from YYYY-MM-DD and HH:mm without timezone misparsing
+  const [y, m, d] = dateStr.split('-').map((x) => parseInt(x, 10));
+  const [H, M] = timeStr.split(':').map((x) => parseInt(x, 10));
+  const dt = new Date(y, (m || 1) - 1, d || 1, H || 0, M || 0, 0, 0);
+  return dt;
+}
+
+function parsePriceToCents(input: string): number | null {
+  // Accepts "12", "12,3", "12.34" (UI already normalizes comma to dot)
+  const t = input.trim();
+  if (!t) return null;
+  const n = Number.parseFloat(t);
+  if (!isFinite(n) || Number.isNaN(n) || n < 0) return null;
+  const cents = Math.round(n * 100);
+  return cents >= 0 ? cents : null;
+}
+
+export default function OwnerEvents() {
+  const { user } = useAuth();
+  const toast = useToast();
+  const qc = useQueryClient();
+
+  // DateTimePicker is a native module; requires Dev Client / build
+
+  const [loadingVenue, setLoadingVenue] = useState(true);
+  const [venue, setVenue] = useState<VenueRow | null>(null);
+
+  // Form state
+  const [title, setTitle] = useState('');
+  const [dateStr, setDateStr] = useState(''); // YYYY-MM-DD (display)
+  const [timeStr, setTimeStr] = useState(''); // HH:mm (display)
+  const [dateObj, setDateObj] = useState<Date | null>(null);
+  const [timeObj, setTimeObj] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [description, setDescription] = useState('');
+  const [submitting, setSubmitting] = useState<'draft' | 'publish' | null>(null);
+  const [coverUri, setCoverUri] = useState<string | null>(null);
+  const [isFree, setIsFree] = useState<boolean>(true);
+  const [priceStr, setPriceStr] = useState('');
+  const [showCongrats, setShowCongrats] = useState(false);
+
+  // Load current owner's venue
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!user?.id) return;
+      try {
+        setLoadingVenue(true);
+        const { data: membership, error: mErr } = await supabase
+          .from('venue_staff')
+          .select('venue_id')
+          .eq('user_id', user.id)
+          .eq('role', 'owner')
+          .limit(1)
+          .maybeSingle();
+        if (mErr) throw mErr;
+        const vId = membership?.venue_id as number | undefined;
+        if (!vId) { if (alive) setVenue(null); return; }
+        const { data: vRow, error: vErr } = await supabase
+          .from('venues')
+          .select('id,name,city_id')
+          .eq('id', vId)
+          .maybeSingle();
+        if (vErr) throw vErr;
+        if (alive) setVenue(vRow as any);
+      } catch {
+        if (alive) setVenue(null);
+      } finally {
+        if (alive) setLoadingVenue(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [user?.id]);
+
+  // Suggestion helpers
+  const setQuickDateTime = (d: Date) => {
+    // Format YYYY-MM-DD and HH:mm from local date
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const HH = String(d.getHours()).padStart(2, '0');
+    const MM = String(d.getMinutes()).padStart(2, '0');
+    setDateStr(`${yyyy}-${mm}-${dd}`);
+    setTimeStr(`${HH}:${MM}`);
+    setDateObj(new Date(yyyy, d.getMonth(), d.getDate(), 12, 0, 0, 0)); // midday avoids DST oddities
+    setTimeObj(new Date(1970, 0, 1, d.getHours(), d.getMinutes(), 0, 0));
+  };
+
+  const nextFridayAt = (hour: number, minute = 0) => {
+    const now = new Date();
+    const d = new Date(now);
+    // JS getDay(): 0 Sun ... 6 Sat. We want next Friday (5)
+    const day = d.getDay();
+    const delta = (5 - day + 7) % 7 || 7; // if today is Fri, go next week
+    d.setDate(d.getDate() + delta);
+    d.setHours(hour, minute, 0, 0);
+    return d;
+  };
+
+  // Android: open native dialogs; iOS: render inline component
+  const openAndroidDate = () => {
+    const base = dateObj ?? new Date();
+    try {
+      DateTimePickerAndroid.open({
+        value: base,
+        mode: 'date',
+        onChange: (event, d) => {
+          if (event.type !== 'set' || !d) return;
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          setDateStr(`${yyyy}-${mm}-${dd}`);
+          setDateObj(new Date(yyyy, d.getMonth(), d.getDate(), 12, 0, 0, 0));
+        },
+      });
+    } catch {
+      toast.show('No se pudo abrir el selector de fecha', 'error');
+    }
+  };
+
+  const openAndroidTime = () => {
+    const base = timeObj ?? new Date(1970, 0, 1, 22, 0, 0, 0);
+    try {
+      DateTimePickerAndroid.open({
+        value: base,
+        mode: 'time',
+        is24Hour: true,
+        onChange: (event, d) => {
+          if (event.type !== 'set' || !d) return;
+          const HH = String(d.getHours()).padStart(2, '0');
+          const MM = String(d.getMinutes()).padStart(2, '0');
+          setTimeStr(`${HH}:${MM}`);
+          setTimeObj(new Date(1970, 0, 1, d.getHours(), d.getMinutes(), 0, 0));
+        },
+      });
+    } catch {
+      toast.show('No se pudo abrir el selector de hora', 'error');
+    }
+  };
+
+  const canSubmit = useMemo(() => {
+    if (!venue) return false;
+    if (!title.trim()) return false;
+    if (!dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) return false;
+    if (!timeStr.match(/^\d{2}:\d{2}$/)) return false;
+    const dt = buildDateFromParts(dateStr, timeStr);
+    return !isNaN(dt.getTime());
+  }, [venue, title, dateStr, timeStr]);
+
+  const handleCreate = async (mode: 'draft' | 'publish') => {
+    if (!canSubmit || !venue) return;
+    try {
+      setSubmitting(mode);
+      const startLocal = buildDateFromParts(dateStr, timeStr);
+      // Keep description as provided (price stored in structured fields)
+      const finalDescription = description.trim();
+
+      // Upload cover to storage (optional)
+      let cover_url: string | null = null;
+      if (coverUri) {
+        try {
+          const base64 = await FileSystem.readAsStringAsync(coverUri, { encoding: 'base64' as any });
+          const arr = decode(base64);
+          const extGuess = coverUri.split('.').pop()?.toLowerCase();
+          const ext = extGuess && ['jpg','jpeg','png','webp'].includes(extGuess) ? extGuess : 'jpg';
+          const contentType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+          const path = `event_${Date.now()}.${ext}`;
+          const { data: up, error: upErr } = await supabase.storage.from('event-covers').upload(path, arr, { contentType });
+          if (!upErr && up?.path) {
+            const { data: pub } = supabase.storage.from('event-covers').getPublicUrl(up.path);
+            cover_url = pub?.publicUrl || null;
+          }
+        } catch (e) {
+          // Silenciar fallo de portada; seguimos sin portada
+        }
+      }
+
+      const price_cents = isFree ? null : parsePriceToCents(priceStr);
+      const payload: any = {
+        title: title.trim(),
+        description: finalDescription || null,
+        start_at: startLocal.toISOString(),
+        venue_id: venue.id,
+        city_id: venue.city_id,
+        status: mode === 'publish' ? 'published' : 'draft',
+        published_at: mode === 'publish' ? new Date().toISOString() : null,
+        cover_url,
+        is_free: !!isFree,
+        price_cents: price_cents,
+        currency: 'EUR',
+      };
+      const { data, error } = await supabase.from('events').insert(payload).select('id').maybeSingle();
+      if (error) throw error;
+      const evId = (data as any)?.id;
+      toast.show(mode === 'publish' ? 'Evento publicado' : 'Borrador guardado', 'success');
+  // Invalida el listado de eventos del usuario final para refrescar en el próximo focus/mount
+  try { qc.invalidateQueries({ queryKey: ['events-full'] }); } catch {}
+      // Reset form but keep date/time for faster consecutive creation
+      setTitle('');
+      setDescription('');
+      setCoverUri(null);
+      setIsFree(true);
+      setPriceStr('');
+      // Ya no navegamos al feed/swipe del usuario final. Mostramos modal de enhorabuena.
+      if (mode === 'publish') setShowCongrats(true);
+      // Optionally navigate to event detail later
+    } catch (e:any) {
+      const msg = e?.message || 'No se pudo crear el evento';
+      toast.show(msg, 'error');
+    } finally {
+      setSubmitting(null);
+    }
+  };
+
+  // Default quick fill: set to today 22:00 if empty on first load
+  useEffect(() => {
+    if (!dateStr && !timeStr) {
+      const d = new Date();
+      d.setHours(22, 0, 0, 0);
+      setQuickDateTime(d);
+    }
+  }, []);
+
+  return (
+    <RequireOwnerReady>
+      <Screen style={{ backgroundColor: theme.colors.bg }}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 12, paddingBottom: 16 }}>
+          <View style={{ gap: 8 }}>
+            <H1>Eventos</H1>
+            <P>Publica un evento rápido. Lo mínimo: título y fecha/hora.</P>
+          </View>
+
+          <Card>
+          {loadingVenue ? (
+            <View style={{ paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <ActivityIndicator color={theme.colors.primary} />
+              <P>Buscando tu local…</P>
+            </View>
+          ) : venue ? (
+            <P dim>
+              Local: <Text style={{ color: theme.colors.text }}>{venue.name}</Text>
+            </P>
+          ) : (
+            <P dim>No encontramos tu local. Asegúrate de completar el onboarding.</P>
+          )}
+
+          <View style={{ height: 8 }} />
+
+          <P bold>Título</P>
+          <TextInput value={title} onChangeText={setTitle} placeholder="Ej: Fiesta de los 80s" />
+
+          <View style={{ height: 12 }} />
+
+          <P bold>Fecha y hora</P>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <View style={{ flex: 1, position: 'relative' }}>
+              <TextInput value={dateStr} onChangeText={setDateStr} placeholder="YYYY-MM-DD" />
+              {Platform.OS === 'android' && (
+                <Pressable onPress={openAndroidDate} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
+              )}
+            </View>
+            <View style={{ width: 120, position: 'relative' }}>
+              <TextInput value={timeStr} onChangeText={setTimeStr} placeholder="HH:mm" />
+              {Platform.OS === 'android' && (
+                <Pressable onPress={openAndroidTime} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
+              )}
+            </View>
+          </View>
+
+          {Platform.OS === 'ios' && showDatePicker && (
+            <DateTimePicker
+              value={dateObj ?? new Date()}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'inline' : 'default'}
+              onChange={(_: any, d?: Date) => {
+                if (!d) { setShowDatePicker(false); return; }
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                setDateStr(`${yyyy}-${mm}-${dd}`);
+                setDateObj(new Date(yyyy, d.getMonth(), d.getDate(), 12, 0, 0, 0));
+                // iOS inline stays until user dismisses
+              }}
+            />
+          )}
+
+          {Platform.OS === 'ios' && showTimePicker && (
+            <DateTimePicker
+              value={timeObj ?? new Date(1970, 0, 1, 22, 0, 0, 0)}
+              mode="time"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={(_: any, d?: Date) => {
+                if (!d) { setShowTimePicker(false); return; }
+                const HH = String(d.getHours()).padStart(2, '0');
+                const MM = String(d.getMinutes()).padStart(2, '0');
+                setTimeStr(`${HH}:${MM}`);
+                setTimeObj(new Date(1970, 0, 1, d.getHours(), d.getMinutes(), 0, 0));
+                // iOS inline stays until user dismisses
+              }}
+            />
+          )}
+
+          {/* Quick suggestions */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+            <Chip label="Hoy 22:00" onPress={() => { const d=new Date(); d.setHours(22,0,0,0); setQuickDateTime(d); }} />
+            <Chip label="Mañana 22:00" onPress={() => { const d=new Date(); d.setDate(d.getDate()+1); d.setHours(22,0,0,0); setQuickDateTime(d); }} />
+            <Chip label="Viernes 23:00" onPress={() => setQuickDateTime(nextFridayAt(23))} />
+          </View>
+
+          <View style={{ height: 12 }} />
+
+          <P bold>Descripción (opcional)</P>
+          <TextInput value={description} onChangeText={setDescription} placeholder="Detalles para los asistentes" multiline />
+
+          <View style={{ height: 12 }} />
+
+          <P bold>Portada</P>
+          <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+            <Button
+              title={coverUri ? 'Cambiar portada' : 'Subir portada'}
+              variant="outline"
+              onPress={async () => {
+                const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                if (perm.status !== 'granted') { toast.show('Permiso denegado para acceder a fotos', 'error'); return; }
+                const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
+                if (!res.canceled && res.assets?.[0]?.uri) setCoverUri(res.assets[0].uri);
+              }}
+            />
+            {coverUri ? <Text style={{ color: theme.colors.subtext, flex: 1 }} numberOfLines={1}>Portada seleccionada</Text> : null}
+          </View>
+
+          <View style={{ height: 12 }} />
+
+          <P bold>Entrada</P>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <Switch value={isFree} onValueChange={setIsFree} />
+            <Text style={{ color: theme.colors.text }}>Gratis</Text>
+          </View>
+          {!isFree && (
+            <View style={{ marginTop: 8, width: 160 }}>
+              <TextInput
+                value={priceStr}
+                onChangeText={(t) => { if (/^\d{0,4}(?:[\.,]\d{0,2})?$/.test(t)) setPriceStr(t.replace(',', '.')); }}
+                placeholder="Precio €"
+                keyboardType="numeric"
+              />
+            </View>
+          )}
+          </Card>
+        </ScrollView>
+
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <Button
+            title={submitting==='draft' ? 'Guardando…' : 'Guardar borrador'}
+            onPress={() => handleCreate('draft')}
+            variant="outline"
+            disabled={!canSubmit || submitting !== null}
+          />
+          <View style={{ flex: 1 }} />
+          <Button
+            title={submitting==='publish' ? 'Publicando…' : 'Publicar'}
+            onPress={() => handleCreate('publish')}
+            disabled={!canSubmit || submitting !== null || !venue}
+          />
+        </View>
+      </Screen>
+      {/* Modal de enhorabuena al publicar */}
+      <Modal
+        visible={showCongrats}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCongrats(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <Card style={{ width: '100%', maxWidth: 360, alignItems: 'center', paddingVertical: 24 }}>
+            <View style={{ position: 'absolute', top: -10, left: 0, right: 0 }} pointerEvents="none">
+              <ConfettiCannon count={80} origin={{ x: 0, y: 0 }} fadeOut autoStart={true} explosionSpeed={450} fallSpeed={2400} />
+            </View>
+            <Text style={{ color: theme.colors.text, fontSize: 22, fontWeight: '800', textAlign: 'center' }}>¡Evento publicado!</Text>
+            <Text style={{ color: theme.colors.subtext, marginTop: 8, textAlign: 'center' }}>Enhorabuena 🎉 Ya es visible para los usuarios.</Text>
+            <View style={{ height: 16 }} />
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <Button title="Crear otro" onPress={() => setShowCongrats(false)} variant="outline" />
+              <Button title="Vale" onPress={() => setShowCongrats(false)} />
+            </View>
+          </Card>
+        </View>
+      </Modal>
+    </RequireOwnerReady>
+  );
+}
+
+const Chip: React.FC<{ label: string; onPress: () => void }> = ({ label, onPress }) => (
+  <Pressable
+    onPress={onPress}
+    style={{
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+      backgroundColor: (theme.colors as any).surfaceMuted || theme.colors.card,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    }}
+  >
+    <Text style={{ color: theme.colors.text }}>{label}</Text>
+  </Pressable>
+);

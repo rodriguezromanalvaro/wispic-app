@@ -1,5 +1,6 @@
 // app.config.ts
 import { ExpoConfig } from 'expo/config';
+import fs from 'fs';
 
 const config: ExpoConfig = {
   name: 'Wispic',
@@ -8,13 +9,61 @@ const config: ExpoConfig = {
   orientation: 'portrait',
   // ❌ quitamos icon
   userInterfaceStyle: 'automatic',
+  // Enable React Native New Architecture at app-config level (preferred over plugin flag)
+  newArchEnabled: true,
   ios: {
     supportsTablet: false,
     // ❌ sin icon iOS
+    bundleIdentifier: 'com.wispic.app',
+    // Apple Sign-In deshabilitado
+    // usesAppleSignIn: true,
+    infoPlist: {
+      NSLocationWhenInUseUsageDescription:
+        'Necesitamos tu ubicación para mostrar eventos cercanos y mejorar la experiencia.',
+      NSLocationAlwaysAndWhenInUseUsageDescription:
+        'Permite el acceso en segundo plano para funciones como recordatorios basados en ubicación (opcional).',
+      NSCameraUsageDescription:
+        'Necesitamos la cámara para escanear códigos y capturar imágenes dentro de la app.',
+      NSPhotoLibraryUsageDescription:
+        'Necesitamos acceder a tus fotos para seleccionar y subir imágenes.',
+      NSPhotoLibraryAddUsageDescription:
+        'Necesitamos guardar imágenes en tu galería cuando exportes o descargues contenido.',
+      NSFaceIDUsageDescription:
+        'Usamos Face ID para iniciar sesión de forma rápida y segura.',
+      UIBackgroundModes: ['location'],
+    },
+    // Si añades GoogleService-Info.plist en la raíz del repo, descomenta/ajusta esta ruta
+    // googleServicesFile: './GoogleService-Info.plist',
+    config: {
+      googleMapsApiKey: process.env.IOS_GOOGLE_MAPS_API_KEY,
+    },
   },
   android: {
     // ❌ sin adaptiveIcon para evitar procesado de PNGs
     package: 'com.wispic.app',
+  // Usamos resize para que el sistema reduzca la altura disponible y nosotros NO dupliquemos desplazamientos
+  softwareKeyboardLayoutMode: 'resize',
+    permissions: [
+      'ACCESS_COARSE_LOCATION',
+      'ACCESS_FINE_LOCATION',
+      'ACCESS_BACKGROUND_LOCATION',
+      'CAMERA',
+      'POST_NOTIFICATIONS',
+      // Android 13+ granular media permission for images/photos
+      'READ_MEDIA_IMAGES',
+  ],
+  ...(fs.existsSync('./google-services.json') ? { googleServicesFile: './google-services.json' } : {}),
+    adaptiveIcon: {
+      // Foreground 1024x1024 con transparencia (negro o blanco en PNG)
+      foregroundImage: './assets/adaptive-icon-foreground.png',
+      // Fondo sólido con un tono suave usado en la paleta de usuario (magenta soft)
+      backgroundColor: '#FFF5F7',
+    },
+    config: {
+      googleMaps: {
+        apiKey: process.env.ANDROID_GOOGLE_MAPS_API_KEY,
+      },
+    },
   },
   web: {
     bundler: 'metro',
@@ -23,6 +72,21 @@ const config: ExpoConfig = {
     'expo-router',
     'expo-notifications',
     'expo-updates',
+    'expo-location',
+    'expo-camera',
+    'sentry-expo',
+    // 'expo-apple-authentication',
+    [
+      'expo-build-properties',
+      {
+        android: {
+          kotlinVersion: '2.1.20',
+          kotlinJvmTarget: '17',
+          compileSdkVersion: 35,
+          targetSdkVersion: 35
+        }
+      }
+    ],
   ],
   experiments: {
     typedRoutes: true,
