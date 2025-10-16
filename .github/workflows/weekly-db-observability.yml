@@ -1,0 +1,51 @@
+name: Weekly DB Observability
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Mondays 06:00 UTC
+  workflow_dispatch:
+  push:
+    branches: ["**"]
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL_OBS }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Check DB secret
+        id: db_check
+        shell: bash
+        run: |
+          if [ -n "${SUPABASE_DB_URL}" ]; then
+            echo "has_db=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_db=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Report top queries (app-only)
+        if: steps.db_check.outputs.has_db == 'true'
+        run: APP_ONLY=1 REPORT_LIMIT=50 node scripts/report_top_queries.js > top-queries.json
+
+      - name: Upload artifact
+        if: steps.db_check.outputs.has_db == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-top-queries
+          path: top-queries.json
+
+      - name: Skip (no secret configured)
+        if: steps.db_check.outputs.has_db != 'true'
+        run: echo "SUPABASE_DB_URL_OBS not set; skipping report."

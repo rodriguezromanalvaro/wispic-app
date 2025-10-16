@@ -16,7 +16,13 @@
     "backfill:cities": "ts-node scripts/backfill-city-coords.ts",
     "eas-build-pre-install": "node scripts/write-google-services.js",
     "eas-build-pre-build": "node scripts/write-google-services.js",
-    "icon:shrink": "ts-node scripts/shrink-adaptive-foreground.ts"
+    "icon:shrink": "ts-node scripts/shrink-adaptive-foreground.ts",
+    "perf:audit": "node scripts/run_perf_audit.js",
+    "db:apply:safe": "node scripts/run_sql_files.js supabase/migrations/20251016_120017_advisor_sequences_ownership_fix.sql supabase/migrations/20251016_120016_advisor_fk_indexes_autofix.sql",
+  "db:apply:drop-unused": "node scripts/run_sql_files.js supabase/migrations/20251016_120018_advisor_drop_small_unused_indexes.sql",
+    "db:enable:pgss": "node scripts/run_sql_files.js supabase/migrations/20251016_120023_enable_pg_stat_statements.sql",
+    "report:top-queries": "node scripts/report_top_queries.js",
+    "perf:reset-pgss": "node scripts/reset_pg_stat_statements.js"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
@@ -90,7 +96,8 @@
     "ts-jest": "^29.4.4",
     "ts-node": "^10.9.2",
     "typescript": "~5.9.2",
-    "jimp": "^0.22.12"
+    "jimp": "^0.22.12",
+    "pg": "^8.11.5"
   },
   "overrides": {
     "react-native-worklets": "0.5.1",
