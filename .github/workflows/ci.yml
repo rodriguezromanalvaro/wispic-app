@@ -1,15 +1,14 @@
-name: CI (lint + typecheck + Sentry release)
+name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: ["**"]
   pull_request:
-    branches: [main, dev]
+    branches: ["**"]
 
 jobs:
   ci:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,15 +22,15 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      # TypeScript
       - name: Type check
         run: npm run typecheck
 
-      # ESLint (no corta por warnings en CI)
-      - name: Lint
+      - name: Lint (non-fatal)
         run: npm run lint || true
 
-      # --- Detectar si hay secrets de Sentry sin usar 'secrets' en if ---
+      - name: Tests
+        run: npm test -- --ci
+
       - name: Check Sentry secrets
         id: sentry_check
         shell: bash
@@ -42,7 +41,6 @@ jobs:
             echo "has_sentry=false" >> $GITHUB_OUTPUT
           fi
 
-      # --- Sentry Release (solo si existen secrets) ---
       - name: Create Sentry Release
         if: steps.sentry_check.outputs.has_sentry == 'true'
         uses: getsentry/action-release@v1
