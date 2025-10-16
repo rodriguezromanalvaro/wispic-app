@@ -11,12 +11,50 @@ if (!process.env.NODE_TLS_REJECT_UNAUTHORIZED) {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 }
 
+function maskHost(host) {
+  if (!host) return '';
+  if (host.length <= 4) return '****';
+  return host.slice(0, 2) + '***' + host.slice(-2);
+}
+
+async function connectWithRetry(client, attempts = 3) {
+  let lastErr;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      await client.connect();
+      return;
+    } catch (e) {
+      lastErr = e;
+      const transient = /EAI_AGAIN|ETIMEDOUT|ENOTFOUND|ECONNRESET|ECONNREFUSED/i.test(e.message || '');
+      if (!transient || i === attempts) throw lastErr;
+      const backoffMs = i * 2000;
+      console.error(`Connect attempt ${i} failed: ${e.message}. Retrying in ${backoffMs}ms...`);
+      await new Promise((r) => setTimeout(r, backoffMs));
+    }
+  }
+}
+
 async function main() {
   const dbUrl = process.env.SUPABASE_DB_URL;
   if (!dbUrl) throw new Error('Missing SUPABASE_DB_URL');
 
+  let parsed;
+  try {
+    parsed = new URL(dbUrl);
+  } catch (e) {
+    throw new Error('SUPABASE_DB_URL is not a valid URL. Expected: postgresql://USER:PASSWORD@HOST:PORT/postgres?sslmode=require');
+  }
+  if (!/^postgres(ql)?:$/.test(parsed.protocol)) {
+    throw new Error('SUPABASE_DB_URL must start with postgres:// or postgresql://');
+  }
+  if (/^(host|hostname|example|localhost)$/i.test(parsed.hostname)) {
+    throw new Error('SUPABASE_DB_URL contains a placeholder/invalid HOST. Set the Session Pooler host from Supabase.');
+  }
+
+  console.error(`Connecting to ${maskHost(parsed.hostname)}:${parsed.port || '5432'}`);
+
   const client = new Client({ connectionString: dbUrl, ssl: { rejectUnauthorized: false } });
-  await client.connect();
+  await connectWithRetry(client);
   try {
     const appOnly = (process.env.APP_ONLY === '1' || process.argv.includes('--app-only'));
     const limit = Number(process.env.REPORT_LIMIT || 25);
