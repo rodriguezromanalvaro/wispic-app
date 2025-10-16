@@ -1,88 +1,90 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Screen, Card, H1, P, Button, Switch } from '../../../components/ui';
+import { CenterScaffold } from '../../../components/Scaffold';
+import { Screen, Card, H1, P, Button, Switch, SelectionTile, StickyFooterActions } from '../../../components/ui';
 import { theme } from '../../../lib/theme';
 import { useCompleteProfile } from '../../../lib/completeProfileContext';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-const OPTIONS: { key: string; icon: string }[] = [
+const OPTIONS: { key: 'dating' | 'friends' | 'everything' | 'notSure'; icon: string }[] = [
   { key: 'dating', icon: '❤️' },
   { key: 'friends', icon: '🤝' },
-  { key: 'networking', icon: '💼' },
-  { key: 'activity', icon: '⚽' },
-  { key: 'languageExchange', icon: '🗣️' },
-  { key: 'travelBuddy', icon: '✈️' },
+  { key: 'everything', icon: '✨' },
+  { key: 'notSure', icon: '🤔' },
 ];
 
 export default function StepSeeking() {
   const { draft, setDraft } = useCompleteProfile();
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const returnTo = String((params as any)?.returnTo || '');
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const [selected, setSelected] = useState<string[]>(draft.seeking || []);
+  // Single selection: store locally as a string; persist as an array with one item for compatibility
+  const [selected, setSelected] = useState<string | null>(Array.isArray(draft.seeking) && draft.seeking.length ? draft.seeking[0] : null);
   const [visible, setVisible] = useState<boolean>(draft.show_seeking ?? true);
-  const toggle = (k: string) => setSelected(cur => cur.includes(k) ? cur.filter(x => x !== k) : [...cur, k]);
-  const canContinue = selected.length > 0;
+  const selectOne = (k: string) => setSelected(cur => (cur === k ? null : k));
+  const canContinue = !!selected;
 
   return (
     <Screen style={{ padding: 0, gap: 0 }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <LinearGradient colors={[theme.colors.primary, '#101828']} style={[styles.gradient, { paddingTop: Math.max(insets.top, 60) }]}>
+        <CenterScaffold variant='auth' paddedTop={Math.max(insets.top, 60)}>
           <View style={[styles.progressWrap,{ top: insets.top + 8 }] }>
             <View style={styles.progressBg}>
-              <View style={[styles.progressFill, { width: `${(4/9)*100}%` }]} />
+              <View style={[styles.progressFill, { width: `${(5/10)*100}%` }]} />
             </View>
-            <P style={styles.progressText}>{t('complete.progress', { current: 4, total: 9 })}</P>
+            <P style={styles.progressText}>{t('complete.progress', { current: 5, total: 10 })}</P>
           </View>
           <View style={styles.center}>
             <H1 style={styles.title}>{t('complete.seekingTitle','¿Qué buscas aquí?')}</H1>
-            <P style={styles.subtitle}>{t('complete.seekingSubtitle','Selecciona todas las que apliquen (multiopción)')}</P>
+            <P style={styles.subtitle}>{t('complete.seekingHint','Esto ayuda a mostrarte mejores coincidencias')}</P>
             <Card style={styles.card}>
-              <View style={styles.optionsWrap}>
+              <View style={{ gap: 10 }}>
                 {OPTIONS.map(o => {
-                  const active = selected.includes(o.key);
+                  const active = selected === o.key;
+                  const label = `${o.icon} ${t(`seeking.${o.key}`, t(`seeking.${o.key}`, o.key))}`;
                   return (
-                    <Button
+                      <SelectionTile
                       key={o.key}
-                      title={`${o.icon} ${t(`seeking.${o.key}`, t(`seeking.${o.key}`, o.key))}`}
-                      variant={active ? 'primary' : 'ghost'}
-                      onPress={() => toggle(o.key)}
-                      style={active ? styles.optionActive : undefined}
+                        active={active}
+                        label={label}
+                        indicator="radio"
+                        leftAccentOnActive
+                        onPress={() => selectOne(o.key)}
                     />
                   );
                 })}
               </View>
-              <P style={styles.hint}>{t('complete.seekingHint','Esto ayuda a mostrarte mejores coincidencias')} · {selected.length} {t('complete.selected','seleccionadas')}</P>
+              <P style={styles.hint}>{t('complete.visibilityQuestion','¿Quieres que esto se muestre en tu perfil?')}</P>
               <View style={{ flexDirection:'row', alignItems:'center', gap:8, marginTop:8 }}>
                 <Switch value={visible} onValueChange={setVisible} />
-                <P style={{ color:'#CBD5E1', fontSize:12 }}>{visible ? t('complete.seekingVisible','Mostrar en mi perfil') : t('complete.seekingHidden','Ocultar en mi perfil')}</P>
-              </View>
-              <View style={{ flexDirection:'row', gap:8, marginTop:12 }}>
-                <Button title={t('common.back')} variant="ghost" onPress={() => router.push('(auth)/complete/orientation' as any)} />
-                <Button title={t('common.continue')} disabled={!canContinue} onPress={() => { setDraft(d => ({ ...d, seeking: selected, show_seeking: visible })); router.push('(auth)/complete/gender' as any); }} />
+                <P style={{ color: theme.colors.textDim, fontSize:12 }}>{visible ? t('complete.visible','Mostrar en mi perfil') : t('complete.hidden','Ocultar en mi perfil')}</P>
               </View>
             </Card>
           </View>
-        </LinearGradient>
+          <StickyFooterActions
+            actions={[
+              { title: t('common.continue'), onPress: () => { setDraft(d => ({ ...d, seeking: selected ? [selected] : [], show_seeking: visible })); if (returnTo === 'hub') router.replace('(tabs)/profile' as any); else router.push('(auth)/complete/orientation' as any); }, disabled: !canContinue },
+              { title: t('common.back'), onPress: () => { setDraft(d => ({ ...d, seeking: selected ? [selected] : [], show_seeking: visible })); if (returnTo === 'hub') router.replace('(tabs)/profile' as any); else router.push('(auth)/complete/gender' as any); }, variant: 'outline' },
+            ]}
+          />
+        </CenterScaffold>
       </KeyboardAvoidingView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  gradient: { flex: 1, paddingHorizontal: 20, paddingTop: 60, paddingBottom: 24 },
   progressWrap: { position: 'absolute', top: 16, left: 20, right: 20, gap: 6 },
-  progressBg: { width: '100%', height: 6, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 999, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: '#FFFFFF', borderRadius: 999 },
-  progressText: { color: '#E6EAF2', fontSize: 12 },
+  progressBg: { width: '100%', height: 6, backgroundColor: theme.colors.surface, borderRadius: 999, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: theme.colors.primary, borderRadius: 999 },
+  progressText: { color: theme.colors.textDim, fontSize: 12 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
-  title: { color: '#FFFFFF', fontSize: 30, fontWeight: '800', textAlign: 'center' },
-  subtitle: { color: '#D0D5DD', fontSize: 16, textAlign: 'center', marginHorizontal: 12, marginBottom: 8 },
-  card: { width: '100%', maxWidth: 460, padding: theme.spacing(2), borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
-  optionsWrap: { flexDirection:'row', flexWrap:'wrap', gap:8 },
-  optionActive: {},
-  hint: { color:'#94A3B8', fontSize:12, marginTop:12 }
+  title: { color: theme.colors.text, fontSize: 30, fontWeight: '800', textAlign: 'center' },
+  subtitle: { color: theme.colors.subtext, fontSize: 16, textAlign: 'center', marginHorizontal: 12, marginBottom: 8 },
+  card: { width: '100%', maxWidth: 460, padding: theme.spacing(2), borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
+  hint: { color: theme.colors.textDim, fontSize:12, marginTop:12 }
 });

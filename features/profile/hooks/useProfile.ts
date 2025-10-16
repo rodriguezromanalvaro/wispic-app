@@ -3,6 +3,7 @@ import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../lib/useAuth';
 import { filterPublicProfile, annotateOwnerPerspective, FullProfile } from '../logic/privacy';
 import { computeCompletion } from '../logic/computeCompletion';
+import type { Profile as ProfileRow } from '../../../lib/types';
 
 interface UseProfileResult {
   data: (FullProfile & { completion: ReturnType<typeof computeCompletion> }) | null | undefined;
@@ -14,7 +15,7 @@ interface UseProfileResult {
 }
 
 export function useProfile(targetId?: string): UseProfileResult {
-  const { user } = useAuth();
+  const { user, profile: authProfile } = useAuth();
   const profileId = targetId || user?.id;
   const isOwner = !!user?.id && user.id === profileId;
 
@@ -24,7 +25,7 @@ export function useProfile(targetId?: string): UseProfileResult {
     queryFn: async (): Promise<FullProfile | null> => {
       const { data: profile, error: pErr } = await supabase
         .from('profiles')
-        .select('id, display_name, bio, calculated_age, gender, birthdate, is_premium, verified_at, interested_in, seeking, show_orientation, show_gender, show_seeking, avatar_url')
+        .select('id, display_name, bio, calculated_age, gender, birthdate, is_premium, verified_at, interested_in, seeking, show_orientation, show_gender, show_seeking, avatar_url, city')
         .eq('id', profileId)
         .maybeSingle();
       if (pErr) throw pErr;
@@ -89,6 +90,7 @@ export function useProfile(targetId?: string): UseProfileResult {
         bio: profile.bio,
         age: profile.calculated_age,
         gender: profile.gender,
+        city: (profile as any).city ?? null,
         interests,
         is_premium: profile.is_premium,
         birthdate: profile.birthdate,
@@ -104,7 +106,44 @@ export function useProfile(targetId?: string): UseProfileResult {
         photos: (photos||[]).map(p => ({ id: p.id, url: p.url, sort_order: p.sort_order }))
       };
       return full;
-    }
+    },
+    // Show something immediately using the auth profile snapshot if this is the owner
+    placeholderData: (() => {
+      if (!isOwner || !authProfile) return undefined;
+      const fromAuth = authProfile as ProfileRow;
+      // Compute age locally from birthdate if available
+      const calcAge = (() => {
+        const bd = fromAuth.birthdate ? new Date(fromAuth.birthdate) : null;
+        if (!bd || isNaN(bd.getTime())) return fromAuth.age ?? null;
+        const today = new Date();
+        let age = today.getFullYear() - bd.getFullYear();
+        const m = today.getMonth() - bd.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < bd.getDate())) age--;
+        return age;
+      })();
+      const full: FullProfile = {
+        id: fromAuth.id,
+        display_name: fromAuth.display_name,
+        bio: fromAuth.bio,
+        age: calcAge,
+        gender: fromAuth.gender ?? null,
+        city: fromAuth.city ?? null,
+        interests: fromAuth.interests || [],
+        is_premium: fromAuth.is_premium ?? null,
+        birthdate: fromAuth.birthdate ?? null,
+        verified_at: fromAuth.verified_at ?? null,
+        interested_in: [],
+        seeking: [],
+        show_orientation: true,
+        show_gender: true,
+        show_seeking: true,
+        avatar_url: fromAuth.avatar_url ?? null,
+        prompts: fromAuth.prompts || [],
+        photos_count: fromAuth.photos_count || 0,
+        photos: []
+      };
+      return full;
+    })()
   });
 
   let ownerData: (FullProfile & { completion: ReturnType<typeof computeCompletion> }) | null | undefined = undefined;

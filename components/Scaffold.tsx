@@ -16,18 +16,30 @@ interface CenterScaffoldProps {
   style?: ViewStyle;
   /** Dibuja una fina línea/acento superior usando el gradiente brand */
   topAccent?: boolean;
+  /** Si es true, no pinta ningún fondo: deja pasar el background del contenedor */
+  transparentBg?: boolean;
 }
 
-export const CenterScaffold: React.FC<CenterScaffoldProps> = ({ children, variant='profile', paddedTop=0, style, topAccent }) => {
+export const CenterScaffold: React.FC<CenterScaffoldProps> = ({ children, variant='profile', paddedTop=0, style, topAccent, transparentBg }) => {
+  const maxWidth = (variant === 'auth') ? theme.layout.authWidth : theme.layout.maxWidth;
+
+  if (transparentBg) {
+    return (
+      <View style={styles.gradient /* solo para ocupar el espacio */}>
+        <View style={[styles.inner, { maxWidth, paddingTop: paddedTop }, style]}>
+          {children}
+        </View>
+      </View>
+    );
+  }
   let base: string[];
   switch (variant) {
     case 'light':
       base = theme.gradients.dark; // forzamos dark baseline ahora; light queda opcional
       break;
     case 'minimal':
-    case 'auth': // auth cae en minimal para no sobrecargar color
-      // Fondo casi plano según modo
-      base = theme.mode === 'dark' ? theme.gradients.dark : ['#FFFFFF', '#FFFFFF', '#F5F7FA'];
+    case 'auth': // auth cae en minimal; unificamos con pantallas de creación (claro en light, oscuro en dark)
+      base = theme.mode === 'dark' ? theme.gradients.dark : (theme.gradients.appBg as any);
       break;
     case 'brand':
       base = theme.gradients.brand;
@@ -42,20 +54,24 @@ export const CenterScaffold: React.FC<CenterScaffoldProps> = ({ children, varian
   }
   const normalized = base.length >= 3 ? base.slice(0,3) : [base[0], base[1] ?? base[0], base[base.length-1] ?? base[0]];
   const gradient = normalized as [string,string,string];
-  const maxWidth = (variant === 'auth') ? theme.layout.authWidth : theme.layout.maxWidth;
+  const showGlows = variant === 'profile' || variant === 'brand' || variant === 'positive' || variant === 'auth';
   return (
-    <LinearGradient colors={gradient} style={styles.gradient}>
-      {/* Glow superior decorativo opcional */}
-      <LinearGradient
-        colors={theme.gradients.glowTop as [string,string]}
-        style={styles.glowTop}
-        pointerEvents="none"
-      />
-      <LinearGradient
-        colors={theme.gradients.glowBottom as [string,string]}
-        style={styles.glowBottom}
-        pointerEvents="none"
-      />
+    <LinearGradient colors={gradient} start={{ x:0.1, y:0 }} end={{ x:0.9, y:1 }} style={styles.gradient}>
+      {/* Glow decorativo solo en variantes con más personalidad */}
+      {showGlows && (
+        <LinearGradient
+          colors={theme.gradients.glowTop as [string,string]}
+          style={styles.glowTop}
+          pointerEvents="none"
+        />
+      )}
+      {showGlows && (
+        <LinearGradient
+          colors={theme.gradients.glowBottom as [string,string]}
+          style={styles.glowBottom}
+          pointerEvents="none"
+        />
+      )}
       {topAccent && (
         <LinearGradient
           colors={theme.gradients.brand as [string,string]}

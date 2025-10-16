@@ -113,6 +113,8 @@ export const theme = {
     brandSoft: ['rgba(255,107,107,0.16)', 'rgba(255,107,107,0.06)'],
     positive: ['#10B981', '#34D399'],
     dark: ['#0B1220', '#111827'],
+    // Fondo general con leve matiz cálido para pantallas (feed, chat, etc.)
+    appBg: ['#FFF8F5', '#FFFFFF', '#FFF5F7'],
     glowTop: ['rgba(255,107,107,0.16)', 'rgba(255,107,107,0)'],
     glowBottom: ['rgba(255,107,107,0)', 'rgba(255,107,107,0.14)']
   },
@@ -137,6 +139,39 @@ export const palettes = {
       brand: ['#FF4D8D', '#A855F7'] as [string, string],
       brandSoft: ['rgba(225,29,72,0.16)', 'rgba(168,85,247,0.08)'] as [string, string],
     }
+  },
+  owner: {
+    colors: {
+      bg: '#F5F8FF',
+      bgAlt: '#FFFFFF',
+      card: '#FFFFFF',
+      cardAlt: '#F5F8FF',
+      surface: 'rgba(0,0,0,0.04)',
+      surfaceAlt: 'rgba(0,0,0,0.08)',
+      overlay: 'rgba(255,255,255,0.55)',
+      border: '#E5E7EB',
+      divider: '#E5E7EB',
+      text: '#0B1220',
+      subtext: '#6B7280',
+      textDim: '#6B7280',
+      white: '#FFFFFF',
+      primary: '#2563EB',
+      primaryAlt: '#60A5FA',
+      primaryText: '#FFFFFF',
+      secondary: '#93C5FD',
+      focus: '#2563EB',
+      positive: '#10B981',
+      success: '#10B981',
+      warning: '#F59E0B',
+      danger: '#EF4444',
+      dangerAlt: '#F87171',
+      surfaceMuted: '#F5F8FF'
+    },
+    gradients: {
+      brand: ['#60A5FA', '#2563EB'] as [string, string],
+      brandSoft: ['rgba(59,130,246,0.16)', 'rgba(59,130,246,0.06)'] as [string, string],
+      appBg: ['#F5F8FF', '#FFFFFF', '#F0F7FF'] as [string, string, string]
+    }
   }
 } as const;
 
@@ -151,5 +186,6 @@ export function applyPalette(name: keyof typeof palettes) {
     ...theme.gradients,
     brand: p.gradients.brand,
     brandSoft: p.gradients.brandSoft,
+    ...(p.gradients as any).appBg ? { appBg: (p.gradients as any).appBg } : {}
   } as any;
 }

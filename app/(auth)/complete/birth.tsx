@@ -1,8 +1,9 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View, Alert, TextInput as RNTextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CenterScaffold } from '../../../components/Scaffold';
-import { Screen, Card, H1, P, TextInput, Button } from '../../../components/ui';
+import { OnboardingHeader } from '../../../components/OnboardingHeader';
+import { Screen, Card, H1, P, TextInput, Button, StickyFooterActions } from '../../../components/ui';
 import { theme } from '../../../lib/theme';
 import { useCompleteProfile } from '../../../lib/completeProfileContext';
 import { useRouter } from 'expo-router';
@@ -38,27 +39,58 @@ export default function StepBirth() {
     return { ok: true, reason: '' };
   }, [birthdate, t]);
 
+  // Field-level error states: only when each segment is fully filled
+  const yearErr = useMemo(() => {
+    if (year.length !== 4) return false;
+    const yy = Number(year);
+    const currentYear = new Date().getFullYear();
+    return !Number.isFinite(yy) || yy < 1900 || yy > currentYear;
+  }, [year]);
+  const monthErr = useMemo(() => {
+    if (month.length !== 2) return false;
+    const mm = Number(month);
+    return !Number.isFinite(mm) || mm < 1 || mm > 12;
+  }, [month]);
+  const dayErr = useMemo(() => {
+    if (day.length !== 2 || month.length !== 2 || year.length !== 4) return false;
+    const yy = Number(year);
+    const mm = Number(month);
+    const dd = Number(day);
+    if (!Number.isFinite(yy) || !Number.isFinite(mm) || !Number.isFinite(dd)) return true;
+    if (mm < 1 || mm > 12) return false; // month error will highlight instead
+    const leap = (yy % 400 === 0) || (yy % 4 === 0 && yy % 100 !== 0);
+    const dim = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mm - 1];
+    return dd < 1 || dd > dim;
+  }, [year, month, day]);
+
+  useEffect(() => {
+    // Auto-focus year field to open the keyboard immediately
+    const id = setTimeout(() => refYear.current?.focus(), 50);
+    return () => clearTimeout(id);
+  }, []);
+
+  // No cambiamos justifyContent con teclado para mantener homogeneidad entre pantallas
+
+  const displayName = (draft?.name || '').trim();
+  const titleText = displayName
+    ? t('complete.birthTitleAskName', '{{name}}, ¿Cuál es tu fecha de nacimiento?', { name: displayName })
+    : t('complete.birthTitle');
+
   return (
     <Screen style={{ padding: 0, gap: 0 }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-  <CenterScaffold variant='auth' paddedTop={Math.max(insets.top, 60)}>
-          <View style={[styles.progressWrap,{ top: insets.top + 8 }] }>
-                  <View style={styles.progressBg}>
-                    <View style={[styles.progressFill, { width: `${(2/9)*100}%` }]} />
-                  </View>
-                  <P style={styles.progressText}>{t('complete.progress', { current: 2, total: 9 })}</P>
-          </View>
-          <View style={styles.center}>
-            <H1 style={styles.title}>{t('complete.birthTitle')}</H1>
+        <CenterScaffold variant='auth' paddedTop={Math.max(insets.top, 60)}>
+          <OnboardingHeader step={3} total={10} />
+          <View style={[styles.center, { paddingBottom: 24 }]}>            
+            <H1 style={styles.title}>{titleText}</H1>
             <P style={styles.subtitle}>{t('complete.birthSubtitle')}</P>
-
             <Card style={styles.card}>
-              <P style={{ color: '#E6EAF2', marginBottom: 6 }}>{t('complete.birthLabel')}</P>
               <View style={styles.segmentRow}>
                 <RNTextInput
                   ref={refYear}
                   value={year}
                   placeholder={t('complete.birthYearPH','YYYY')}
+                  autoFocus
                   keyboardType="number-pad"
                   maxLength={4}
                   onChangeText={(txt) => {
@@ -66,7 +98,7 @@ export default function StepBirth() {
                     setYear(v);
                     if (v.length === 4) { refMonth.current?.focus(); }
                   }}
-                  style={[styles.segmentInput, !year && validation.ok === false ? styles.segmentError : null]}
+                  style={[styles.segmentInput, yearErr ? styles.segmentError : null]}
                   returnKeyType="next"
                 />
                 <P style={styles.segmentSep}>/</P>
@@ -82,7 +114,7 @@ export default function StepBirth() {
                     setMonth(v);
                     if (v.length === 2) { refDay.current?.focus(); }
                   }}
-                  style={[styles.segmentInput, (month && (Number(month)<1 || Number(month)>12)) ? styles.segmentError : null]}
+                  style={[styles.segmentInput, monthErr ? styles.segmentError : null]}
                   returnKeyType="next"
                 />
                 <P style={styles.segmentSep}>/</P>
@@ -97,25 +129,32 @@ export default function StepBirth() {
                     if (v.length===2 && Number(v) === 0) v='01';
                     setDay(v);
                   }}
-                  style={[styles.segmentInput, (day && (Number(day)<1 || Number(day)>31)) ? styles.segmentError : null]}
+                  style={[styles.segmentInput, dayErr ? styles.segmentError : null]}
                   returnKeyType="done"
                 />
               </View>
-              {birthdate && validation.ok && (
-                <P style={{ color:'#9DA4AF', fontSize:12, marginTop:4 }}>
-                  {t('complete.birthAgePreview','Edad')}: {Math.floor((Date.now() - new Date(birthdate).getTime()) / (365.25*24*3600*1000))}
-                </P>
+              {year.length === 4 && month.length === 2 && day.length === 2 && validation.ok && (
+                (() => {
+                  const years = Math.floor((Date.now() - new Date(birthdate).getTime()) / (365.25*24*3600*1000));
+                  return (
+                    <View style={styles.agePill}>
+                      <P style={styles.ageText}>{t('complete.birthAgeYouAre', 'Tienes {{years}} años', { years })}</P>
+                    </View>
+                  );
+                })()
               )}
-              {!validation.ok && (
+              {year.length === 4 && month.length === 2 && day.length === 2 && !validation.ok && (
                 <P style={{ color: '#F97066', fontSize: 12, marginTop: 4 }}>{validation.reason}</P>
               )}
-              <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-                <Button title={t('common.back')} variant="ghost" onPress={() => router.push('(auth)/complete/name' as any)} />
-                  <Button title={t('common.continue')} disabled={!validation.ok} onPress={() => { if (validation.ok) { setDraft((d) => ({ ...d, birthdate: birthdate.trim() })); router.push('(auth)/complete/orientation' as any); } }} />
-              </View>
             </Card>
           </View>
-  </CenterScaffold>
+          <StickyFooterActions
+            actions={[
+              { title: t('common.continue'), onPress: () => { if (validation.ok) { setDraft((d) => ({ ...d, birthdate: birthdate.trim() })); router.push('(auth)/complete/gender' as any); } }, disabled: !validation.ok },
+              { title: t('common.back'), onPress: () => router.push('(auth)/complete/name' as any), variant: 'outline' },
+            ]}
+          />
+        </CenterScaffold>
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -123,10 +162,6 @@ export default function StepBirth() {
 
 const styles = StyleSheet.create({
   gradient: { flex: 1, paddingHorizontal: 20, paddingTop: 60, paddingBottom: 24 },
-  progressWrap: { position: 'absolute', top: 16, left: 20, right: 20, gap: 6 },
-  progressBg: { width: '100%', height: 6, backgroundColor: theme.colors.surface, borderRadius: 999, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: theme.colors.primary, borderRadius: 999 },
-  progressText: { color: theme.colors.textDim, fontSize: 12 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   title: { color: theme.colors.text, fontSize: 30, fontWeight: '800', textAlign: 'center' },
   subtitle: { color: theme.colors.subtext, fontSize: 16, textAlign: 'center', marginHorizontal: 12, marginBottom: 8 },
@@ -135,4 +170,6 @@ const styles = StyleSheet.create({
   segmentInput: { flex: 1, backgroundColor: theme.colors.surfaceAlt, color: theme.colors.text, paddingHorizontal: 10, paddingVertical: 10, borderRadius: 10, fontSize: 16 },
   segmentSep: { color: theme.colors.textDim, fontSize: 18, paddingHorizontal: 2 },
   segmentError: { borderWidth: 1, borderColor: '#F97066' },
+  agePill: { alignSelf: 'flex-start', marginTop: 6, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: theme.colors.primary },
+  ageText: { color: theme.colors.primary, fontSize: 13, fontWeight: '700' },
 });

@@ -1,42 +1,61 @@
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CenterScaffold } from '../../../components/Scaffold';
-import { Screen, Card, H1, P, TextInput, Button } from '../../../components/ui';
+import { Screen, Card, H1, P, TextInput, Button, StickyFooterActions } from '../../../components/ui';
+import { OnboardingHeader } from '../../../components/OnboardingHeader';
 import { theme } from '../../../lib/theme';
 import { useCompleteProfile } from '../../../lib/completeProfileContext';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { SaveCongratsOverlay } from '../../../components/SaveCongratsOverlay';
 
 export default function StepBio() {
-  const { draft, setDraft } = useCompleteProfile();
+  const { draft, setDraft, saveToSupabase } = useCompleteProfile();
   const [bio, setBio] = useState(draft.bio);
   const router = useRouter();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const [done, setDone] = useState(false);
+  const params = useLocalSearchParams();
+  const returnTo = String((params as any)?.returnTo || '');
+  const isPost = String(params?.post || '') === '1';
+  const MAX = 160;
+  const remaining = Math.max(0, MAX - (bio?.length || 0));
 
   return (
     <Screen style={{ padding: 0, gap: 0 }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
   <CenterScaffold variant='auth' paddedTop={Math.max(insets.top, 60)}>
-          <View style={[styles.progressWrap,{ top: insets.top + 8 }] }>
-            <View style={styles.progressBg}>
-              <View style={[styles.progressFill, { width: `${(6/9)*100}%` }]} />
-            </View>
-            <P style={styles.progressText}>{t('complete.progress', { current: 6, total: 9 })}</P>
-          </View>
+          <OnboardingHeader step={isPost ? 12 : 10} total={isPost ? 12 : 10} />
           <View style={styles.center}>
-            <H1 style={styles.title}>{t('complete.bioTitle')}</H1>
-            <P style={styles.subtitle}>{t('complete.bioSubtitle')}</P>
+            <View style={{ height: 64 }} />
+            <H1 style={styles.title}>{t('complete.bioTitleFriendly','Tu toque personal')}</H1>
+            <P style={styles.subtitle}>{t('complete.bioSubtitleFriendly','Añade una frase que te caracterice y te haga único/a. Breve y con personalidad.')}</P>
 
             <Card style={styles.card}>
-              <TextInput value={bio} onChangeText={setBio} multiline placeholder={t('complete.bioPlaceholder')} style={{ minHeight: 100, textAlignVertical: 'top' }} />
-              <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-                <Button title={t('common.back')} variant="ghost" onPress={() => { setDraft((d) => ({ ...d, bio })); router.push('(auth)/complete/gender' as any); }} />
-                <Button title={t('common.continue')} onPress={() => { setDraft((d) => ({ ...d, bio })); router.push('(auth)/complete/prompts' as any); }} />
-              </View>
+              <TextInput value={bio} onChangeText={(txt)=> setBio(txt.slice(0, MAX))} multiline placeholder={t('complete.bioPlaceholderFriendly','Ej.: Fan del café de filtro, paseos largos y cine en VO.')} style={{ minHeight: 120, textAlignVertical: 'top' }} />
+              <P style={{ color: theme.colors.textDim, fontSize: 12, textAlign: 'right', marginTop: 6 }}>{remaining}</P>
             </Card>
           </View>
+          <StickyFooterActions
+            actions={[
+              { title: t('common.finish','Finalizar'), onPress: async () => { setDraft((d) => ({ ...d, bio })); const ok = await saveToSupabase(); if (ok) setDone(true); } },
+              { title: t('common.back'), onPress: () => { setDraft((d) => ({ ...d, bio })); if (returnTo === 'hub') router.replace('(tabs)/profile' as any); else router.push({ pathname: '(auth)/complete/prompts', params: { post: '1' } } as any); }, variant: 'outline' },
+            ]}
+          />
+          <SaveCongratsOverlay
+            visible={done}
+            confetti={false}
+            title={t('thanks.title','¡Gracias!')}
+            body={t('thanks.body','Has terminado tu perfil. Ya puedes ir a la app y empezar a disfrutar.')}
+            primaryText={returnTo === 'hub' ? t('profile.hub.open','Abrir') : t('thanks.goApp','Ir a la app')}
+            onPrimary={() => {
+              if (returnTo === 'hub') router.replace('(tabs)/profile' as any);
+              else router.replace('(tabs)/events' as any);
+            }}
+            onRequestClose={() => setDone(false)}
+          />
   </CenterScaffold>
       </KeyboardAvoidingView>
     </Screen>
@@ -45,10 +64,7 @@ export default function StepBio() {
 
 const styles = StyleSheet.create({
   gradient: { flex: 1, paddingHorizontal: 20, paddingTop: 60, paddingBottom: 24 },
-  progressWrap: { position: 'absolute', top: 16, left: 20, right: 20, gap: 6 },
-  progressBg: { width: '100%', height: 6, backgroundColor: theme.colors.surface, borderRadius: 999, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: theme.colors.primary, borderRadius: 999 },
-  progressText: { color: theme.colors.textDim, fontSize: 12 },
+  // header migrated to OnboardingHeader
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   title: { color: theme.colors.text, fontSize: 30, fontWeight: '800', textAlign: 'center' },
   subtitle: { color: theme.colors.subtext, fontSize: 16, textAlign: 'center', marginHorizontal: 12, marginBottom: 8 },

@@ -1,5 +1,5 @@
 // FULL ADVANCED RESTORE (series, sponsorship, attendance, Top de hoy) 2025-10-05
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { ActivityIndicator, View, Text, Pressable, TextInput, ScrollView, Alert, SectionList } from 'react-native';
 import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -8,6 +8,7 @@ import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../lib/useAuth';
 import { Screen, Card } from '../../../components/ui';
 import { theme } from '../../../lib/theme';
+import { GradientScaffold } from '../../../features/profile/components/GradientScaffold';
 import { useEventsFiltersStore } from '../../../lib/stores/eventsFilters';
 import { useFeedScopeStore } from '../../../lib/stores/feedScope';
 import { useRefetchOnFocus } from '../../../lib/useRefetchOnFocus';
@@ -181,6 +182,13 @@ export default function Events(){
 
   useRefetchOnFocus(refetch);
 
+  // Manual refresh state to avoid auto-refetch spinner
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await refetch(); } finally { setRefreshing(false); }
+  }, [refetch]);
+
   // Toggle going
   const [toggling, setToggling] = useState<Set<number>>(new Set());
   const toggleGoing = async (eventId:number, going:boolean) => {
@@ -302,22 +310,42 @@ export default function Events(){
   const onScroll = useAnimatedScrollHandler({ onScroll: () => {} });
 
   if(isLoading || error){
-    return <Screen style={{ padding:0 }}>
-      <View style={{ flex:1, justifyContent:'center', alignItems:'center', paddingTop:16 }}>
-        {isLoading ? <ActivityIndicator color={theme.colors.primary}/> : <Text style={{ color: theme.colors.text }}>Error al cargar</Text>}
-      </View>
-    </Screen>;
+    // Sin spinner: skeleton minimalista en carga inicial; mensaje discreto en error
+    return (
+      <Screen style={{ padding:0 }} edges={[]}> 
+        <GradientScaffold>
+          <View style={{ flex:1, paddingTop:16, paddingHorizontal:16 }}>
+            {isLoading ? (
+              <>
+                {[0,1,2].map(i => (
+                  <View key={i} style={{ marginBottom:14, backgroundColor: theme.colors.card, borderRadius: theme.radius, padding:16, borderWidth:1, borderColor: theme.colors.border }}>
+                    <View style={{ height:16, width:'55%', backgroundColor: theme.colors.border, borderRadius:8, marginBottom:10 }} />
+                    <View style={{ height:12, width:'40%', backgroundColor: theme.colors.border, borderRadius:8, marginBottom:6 }} />
+                    <View style={{ height:10, width:'30%', backgroundColor: theme.colors.border, borderRadius:8 }} />
+                  </View>
+                ))}
+              </>
+            ) : (
+              <Card>
+                <Text style={{ color: theme.colors.text }}>Error al cargar</Text>
+              </Card>
+            )}
+          </View>
+        </GradientScaffold>
+      </Screen>
+    );
   }
 
   return (
-    <Screen style={{ padding:0 }}>
+  <Screen style={{ padding:0 }} edges={[]}>
+      <GradientScaffold>
       <AnimatedSectionList
         onScroll={onScroll}
         scrollEventThrottle={16}
         sections={sections}
         keyExtractor={(item:RawItem)=> item.id }
-        refreshing={isRefetching}
-        onRefresh={refetch}
+  refreshing={refreshing}
+  onRefresh={onRefresh}
         contentContainerStyle={{ paddingBottom:56, paddingTop:16 }}
         ListHeaderComponent={
           <View style={{ marginBottom:4 }}>
@@ -436,6 +464,7 @@ export default function Events(){
         }}
       />
       <AttendeesSheet />
+      </GradientScaffold>
     </Screen>
   );
 }

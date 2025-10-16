@@ -22,6 +22,9 @@ CREATE TABLE public.cities (
   created_at timestamp with time zone DEFAULT now(),
   lat double precision,
   lng double precision,
+  slug text,
+  country_code text,
+  lon numeric,
   CONSTRAINT cities_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.event_attendance (
@@ -40,7 +43,7 @@ CREATE TABLE public.event_checkins (
   method text NOT NULL DEFAULT 'manual'::text,
   verified boolean NOT NULL DEFAULT false,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT event_checkins_pkey PRIMARY KEY (user_id, event_id),
+  CONSTRAINT event_checkins_pkey PRIMARY KEY (event_id, user_id),
   CONSTRAINT event_checkins_event_id_fkey FOREIGN KEY (event_id) REFERENCES public.events(id),
   CONSTRAINT event_checkins_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
@@ -70,7 +73,7 @@ CREATE TABLE public.event_rsvps (
   user_id uuid NOT NULL,
   status text NOT NULL DEFAULT 'going'::text CHECK (status = ANY (ARRAY['going'::text, 'cancelled'::text])),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT event_rsvps_pkey PRIMARY KEY (user_id, occurrence_id),
+  CONSTRAINT event_rsvps_pkey PRIMARY KEY (occurrence_id, user_id),
   CONSTRAINT event_rsvps_occurrence_id_fkey FOREIGN KEY (occurrence_id) REFERENCES public.event_occurrences(id)
 );
 CREATE TABLE public.event_series (
@@ -108,6 +111,8 @@ CREATE TABLE public.events (
   sponsored_until timestamp with time zone,
   sponsored_priority integer DEFAULT 0,
   series_id bigint,
+  status text NOT NULL DEFAULT 'published'::text CHECK (status = ANY (ARRAY['draft'::text, 'published'::text, 'archived'::text])),
+  published_at timestamp with time zone,
   CONSTRAINT events_pkey PRIMARY KEY (id),
   CONSTRAINT events_venue_id_fkey FOREIGN KEY (venue_id) REFERENCES public.venues(id),
   CONSTRAINT events_city_id_fkey FOREIGN KEY (city_id) REFERENCES public.cities(id),
@@ -167,6 +172,7 @@ CREATE TABLE public.messages (
   content text,
   image_url text,
   created_at timestamp with time zone DEFAULT now(),
+  client_msg_id uuid,
   CONSTRAINT messages_pkey PRIMARY KEY (id),
   CONSTRAINT messages_match_id_fkey FOREIGN KEY (match_id) REFERENCES public.matches(id),
   CONSTRAINT messages_sender_fkey FOREIGN KEY (sender) REFERENCES auth.users(id)
@@ -247,6 +253,18 @@ CREATE TABLE public.profiles (
   show_gender boolean NOT NULL DEFAULT true,
   seeking ARRAY DEFAULT '{}'::text[],
   show_seeking boolean DEFAULT true,
+  relationship_status text CHECK (relationship_status = ANY (ARRAY['single'::text, 'inRelationship'::text, 'open'::text, 'itsComplicated'::text, 'preferNot'::text])),
+  location_opt_in boolean DEFAULT false,
+  push_opt_in boolean DEFAULT false,
+  notify_messages boolean DEFAULT true,
+  notify_likes boolean DEFAULT true,
+  notify_friend_requests boolean DEFAULT true,
+  expo_push_token text,
+  onboarding_version smallint DEFAULT 2,
+  onboarding_completed boolean DEFAULT false,
+  camera_opt_in boolean NOT NULL DEFAULT false,
+  show_relationship boolean NOT NULL DEFAULT true,
+  city text,
   CONSTRAINT profiles_pkey PRIMARY KEY (id),
   CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
 );
@@ -274,7 +292,7 @@ CREATE TABLE public.prompt_interactions (
 CREATE TABLE public.prompt_template_categories (
   template_id bigint NOT NULL,
   category_id bigint NOT NULL,
-  CONSTRAINT prompt_template_categories_pkey PRIMARY KEY (category_id, template_id),
+  CONSTRAINT prompt_template_categories_pkey PRIMARY KEY (template_id, category_id),
   CONSTRAINT prompt_template_categories_template_id_fkey FOREIGN KEY (template_id) REFERENCES public.profile_prompt_templates(id),
   CONSTRAINT prompt_template_categories_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.prompt_categories(id)
 );
@@ -359,12 +377,40 @@ CREATE TABLE public.user_statistics (
   CONSTRAINT user_statistics_pkey PRIMARY KEY (id),
   CONSTRAINT user_statistics_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
+CREATE TABLE public.venue_goals (
+  venue_id bigint NOT NULL,
+  promote boolean DEFAULT false,
+  attract boolean DEFAULT false,
+  other text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT venue_goals_pkey PRIMARY KEY (venue_id),
+  CONSTRAINT venue_goals_venue_id_fkey FOREIGN KEY (venue_id) REFERENCES public.venues(id)
+);
+CREATE TABLE public.venue_staff (
+  venue_id bigint NOT NULL,
+  user_id uuid NOT NULL,
+  role USER-DEFINED NOT NULL DEFAULT 'owner'::staff_role,
+  active boolean NOT NULL DEFAULT true,
+  onboarded_at timestamp with time zone,
+  verified_at timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT venue_staff_pkey PRIMARY KEY (venue_id, user_id),
+  CONSTRAINT venue_staff_venue_id_fkey FOREIGN KEY (venue_id) REFERENCES public.venues(id),
+  CONSTRAINT venue_staff_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
 CREATE TABLE public.venues (
   id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
   name text NOT NULL,
   city_id bigint NOT NULL,
   created_at timestamp with time zone DEFAULT now(),
   venue_type USER-DEFINED NOT NULL DEFAULT 'nightclub'::venue_type,
+  email text,
+  phone text,
+  category USER-DEFINED,
+  location_text text,
+  description text,
+  avatar_url text,
   CONSTRAINT venues_pkey PRIMARY KEY (id),
   CONSTRAINT venues_city_id_fkey FOREIGN KEY (city_id) REFERENCES public.cities(id)
 );

@@ -1,6 +1,8 @@
 import React, { memo } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { P, Button } from './ui';
+import { View, StyleSheet, Pressable, Text } from 'react-native';
+import { P } from './ui';
+import { theme } from '../lib/theme';
+import { typography } from '../lib/typography';
 
 export type PromptCardProps = {
   title: string;
@@ -11,11 +13,12 @@ export type PromptCardProps = {
   translateChoice: (key: string) => string;
   onToggle: (choice: string) => void;
   colorAccent?: string;
+  disableNewSelection?: boolean; // bloquea nuevas selecciones cuando se alcance el máximo global
 };
 
-function PromptCardCmp({ title, icon, choices, selected, maxChoices, translateChoice, onToggle, colorAccent }: PromptCardProps) {
+function PromptCardCmp({ title, icon, choices, selected, maxChoices, translateChoice, onToggle, colorAccent, disableNewSelection }: PromptCardProps) {
   return (
-    <View style={[styles.card, colorAccent ? { borderLeftColor: colorAccent } : null]}>
+    <View style={styles.card}>
       <View style={styles.headerRow}>
         <P style={styles.title}>{icon ? icon + ' ' : ''}{title}</P>
         {maxChoices > 1 && (
@@ -25,16 +28,23 @@ function PromptCardCmp({ title, icon, choices, selected, maxChoices, translateCh
       <View style={styles.choicesWrap}>
         {choices.map(key => {
           const active = selected.includes(key);
-          const disable = !active && selected.length >= maxChoices;
+          const reachedLocal = selected.length >= maxChoices;
+          const blockNew = !active && (reachedLocal || disableNewSelection);
           return (
-            <Button
+            <Pressable
               key={key}
-              title={translateChoice(key)}
-              variant={active ? 'primary' : 'ghost'}
-              disabled={disable && !active}
-              style={[styles.choiceBtn, disable && !active ? { opacity: 0.45 } : null]}
-              onPress={() => onToggle(key)}
-            />
+              onPress={() => !blockNew || active ? onToggle(key) : null}
+              disabled={blockNew && !active}
+              style={[
+                styles.chip,
+                active ? styles.chipActive : styles.chipInactive,
+                blockNew && !active ? { opacity: 0.45 } : null,
+              ]}
+            >
+              <Text style={[typography.scale.body, { color: active ? theme.colors.text : theme.colors.text, fontWeight: active ? '700' as any : undefined }]}> 
+                {translateChoice(key)}
+              </Text>
+            </Pressable>
           );
         })}
       </View>
@@ -49,15 +59,27 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     padding: 12,
     borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: theme.mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#FFFFFF',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    borderLeftWidth: 4,
-    borderLeftColor: 'transparent'
+    borderColor: theme.mode === 'dark' ? 'rgba(255,255,255,0.10)' : '#E6EAF2'
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  title: { color: '#E6EAF2', fontWeight: '600', flexShrink: 1 },
-  multiBadge: { marginLeft: 8, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, color: '#E6EAF2', fontSize: 12 },
+  title: { color: theme.colors.text, fontWeight: '700', flexShrink: 1 },
+  multiBadge: { marginLeft: 8, backgroundColor: theme.mode === 'dark' ? 'rgba(255,255,255,0.12)' : '#EEF2FF', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, color: theme.colors.text, fontSize: 12 },
   choicesWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-  choiceBtn: { marginBottom: 6 },
+  chip: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    marginBottom: 6,
+  },
+  chipInactive: {
+    backgroundColor: 'transparent',
+    borderColor: theme.mode === 'dark' ? 'rgba(255,255,255,0.18)' : '#CBD5E1',
+  },
+  chipActive: {
+    backgroundColor: theme.mode === 'dark' ? 'rgba(255,255,255,0.10)' : '#FFFFFF',
+    borderColor: theme.colors.primary,
+  },
 });

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type FeedScope = 'all' | 'series' | 'events';
 
@@ -17,6 +18,7 @@ export const useFeedScopeStore = create<FeedScopeState>()(
     {
       name: 'feedScope:v1',
       version: 1,
+      storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => ({ feedScope: s.feedScope }),
     }
   )

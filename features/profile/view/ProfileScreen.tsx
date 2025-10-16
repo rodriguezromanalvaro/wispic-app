@@ -31,6 +31,7 @@ import { SeekingSection } from '../components/sections/SeekingSection';
 import { PromptsSection } from '../components/sections/PromptsSection';
 // Removed large completion section; ring integrated into ProfileHeader
 import { GenderSection } from '../components/sections/GenderSection';
+import { LocationSection } from '../components/sections/LocationSection';
 import PhotoGrid from '../components/PhotoGrid';
 import DraggablePhotoGrid from '../components/DraggablePhotoGrid';
 import { EditOrientationSheet } from '../sheets/EditOrientationSheet';
@@ -57,6 +58,31 @@ export default function ProfileScreen() {
   // legacy fade removed (could be reintroduced with Reanimated if needed)
   // Scroll animations para TopBar eliminadas; se podrían reintroducir si se añade un header interno de nuevo
   useEffect(() => {}, [isLoading, data]);
+
+  // Best-effort: if user granted location, try to get city name once and store it
+  useEffect(() => {
+    (async () => {
+      if (!isOwner || !data) return;
+      try {
+        const { default: ExpoLocation } = await import('expo-location');
+        const perm = await ExpoLocation.getForegroundPermissionsAsync();
+        if (perm.status !== 'granted') return;
+        // Only fetch if city missing to avoid noisy calls
+        if (!data.city) {
+          const pos = await ExpoLocation.getCurrentPositionAsync({ accuracy: ExpoLocation.Accuracy.Balanced });
+          const geo = await ExpoLocation.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+          const first = geo && geo[0];
+          const city = first?.city || first?.subregion || first?.region;
+          if (city && mutations.updateBasics) {
+            await mutations.updateBasics.mutateAsync({} as any); // noop to ensure hook instantiated
+            await (mutations as any).updateBasics.mutateAsync({ city });
+          }
+        }
+      } catch(e) {
+        // silent
+      }
+    })();
+  }, [isOwner, data?.id]);
 
   // Appear animation wrapper (staggered)
   const Appear: React.FC<{ index: number; children: React.ReactNode }> = ({ index, children }) => {
@@ -207,10 +233,19 @@ export default function ProfileScreen() {
                 </Appear>
                 <Appear index={3}>
                   <CardSoft style={styles.fadeInBlock}>
-                  <BioSection bio={data.bio} profileId={data.id} />
+                    <LocationSection
+                      city={(data as any).city}
+                      permissionGranted={true /* best-effort UI: value shows regardless */}
+                      onEdit={undefined}
+                    />
                   </CardSoft>
                 </Appear>
                 <Appear index={4}>
+                  <CardSoft style={styles.fadeInBlock}>
+                  <BioSection bio={data.bio} profileId={data.id} />
+                  </CardSoft>
+                </Appear>
+                <Appear index={5}>
                   <CardSoft style={styles.fadeInBlock}>
                   <OrientationSection
                     items={data.interested_in}
@@ -219,7 +254,7 @@ export default function ProfileScreen() {
                   />
                   </CardSoft>
                 </Appear>
-                <Appear index={5}>
+                <Appear index={6}>
                   <CardSoft style={styles.fadeInBlock}>
                   <SeekingSection
                     items={data.seeking}
@@ -228,7 +263,7 @@ export default function ProfileScreen() {
                   />
                   </CardSoft>
                 </Appear>
-                <Appear index={6}>
+                <Appear index={7}>
                   <CardSoft style={styles.fadeInBlock}>
                   <PromptsSection
                     prompts={data.prompts || []}

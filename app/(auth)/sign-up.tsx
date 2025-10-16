@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Alert, View, StyleSheet, Image, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, View, StyleSheet, Image, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, BackHandler, Modal } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { Screen, Card, H1, P, TextInput, Button } from '../../components/ui';
@@ -23,8 +23,9 @@ export default function SignUp() {
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [passwordTouched, setPasswordTouched] = useState(false);
+  const [existsOpen, setExistsOpen] = useState(false);
 
-  const valid = email.trim().includes('@') && password.trim().length >= 6;
+  const emailValid = useMemo(() => email.trim().includes('@'), [email]);
   const passwordRules = useMemo(() => ([
     { id: 'len', label: t('rules.len'), ok: password.length >= 8 },
     { id: 'upper', label: t('rules.upper'), ok: /[A-Z]/.test(password) },
@@ -32,7 +33,16 @@ export default function SignUp() {
     { id: 'digit', label: t('rules.digit'), ok: /\d/.test(password) },
     { id: 'sym', label: t('rules.sym'), ok: /[^\w\s]/.test(password) },
   ]), [password, t]);
+  const allRulesOk = useMemo(() => passwordRules.every(r => r.ok), [passwordRules]);
+  const valid = emailValid && allRulesOk;
   const strength = useMemo(() => passwordRules.filter(r => r.ok).length / passwordRules.length, [passwordRules]);
+
+  // Hardware back should respect previous screen
+  useEffect(() => {
+    const onBack = () => { try { router.back(); } catch {} return true; };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+    return () => sub.remove();
+  }, []);
 
   const gotoHome = async () => {
     setMsg(t('auth.redirecting'));
@@ -40,7 +50,12 @@ export default function SignUp() {
   };
 
   const signUp = async () => {
-    if (!valid) return Alert.alert(t('auth.invalidEmail'), t('auth.invalidPassword'));
+    if (!emailValid) {
+      return Alert.alert(t('auth.invalidEmail'));
+    }
+    if (!allRulesOk) {
+      return Alert.alert(t('auth.invalidPassword'), t('auth.passwordRulesIntro'));
+    }
     try {
       setLoadingUp(true);
       setMsg(t('auth.creatingAccount'));
@@ -52,6 +67,12 @@ export default function SignUp() {
 
       if (error) {
         setMsg('');
+        const msg = (error as any)?.message?.toLowerCase?.() || '';
+        if (msg.includes('already') || msg.includes('exists') || (error as any)?.status === 400) {
+          // Mostrar modal simpático en vez de alerta "cutre"
+          setExistsOpen(true);
+          return;
+        }
         return Alert.alert('Error', error.message);
       }
 
@@ -73,7 +94,7 @@ export default function SignUp() {
   const signInWithProvider = async (provider: 'google' | 'apple') => {
     try {
   setMsg(t('auth.redirecting'));
-      const redirectTo = AuthSession.makeRedirectUri({ scheme: 'wispic' });
+  const redirectTo = AuthSession.makeRedirectUri({ scheme: 'wispic', path: 'auth/callback' });
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: { redirectTo, skipBrowserRedirect: false },
@@ -104,13 +125,10 @@ export default function SignUp() {
             <View style={{ width: '100%', gap: 12 }}>
               <TouchableOpacity style={[styles.socialBtn, { backgroundColor: '#fff' }]} activeOpacity={0.9} onPress={() => signInWithProvider('google')}>
                 <Ionicons name="logo-google" size={20} color="#111" />
-                <P style={styles.socialTextDark}>{t('auth.google')}</P>
+                <P style={styles.socialTextDark}>Continuar con Google</P>
               </TouchableOpacity>
 
-              <TouchableOpacity style={[styles.socialBtn, { backgroundColor: '#000' }]} activeOpacity={0.9} onPress={() => signInWithProvider('apple')}>
-                <Ionicons name="logo-apple" size={20} color="#fff" />
-                <P style={styles.socialTextLight}>{t('auth.apple')}</P>
-              </TouchableOpacity>
+              {/* Apple Sign-In deshabilitado por ahora */}
 
               <View style={styles.dividerRow}>
                 <View style={styles.divider} />
@@ -188,10 +206,24 @@ export default function SignUp() {
 
           <View style={{ height: 8 }} />
           <P style={styles.haveAccount}>
-            {t('auth.haveAccount')}<Link href="/(auth)/sign-in" style={{ color: '#fff', textDecorationLine: 'underline' }}>{t('auth.login')}</Link>
+            {t('auth.haveAccount')}<Link href="/(auth)/sign-in" style={{ color: theme.colors.primary, textDecorationLine: 'underline' }}>{t('auth.login')}</Link>
           </P>
         </View>
           </ScrollView>
+          {/* Modal: cuenta existente */}
+          <Modal visible={existsOpen} transparent animationType="fade" onRequestClose={() => setExistsOpen(false)}>
+            <View style={styles.modalOverlay}>
+              <Card style={styles.modalCard}>
+                <H1 style={{ textAlign: 'center', marginBottom: 6 }}>¡Vaya!</H1>
+                <P style={{ color: theme.colors.textDim, textAlign: 'center', marginBottom: 2 }}>Parece que esa cuenta ya está registrada.</P>
+                <P style={{ color: theme.colors.textDim, textAlign: 'center', marginBottom: 12 }}>Prueba a iniciar sesión o usa otro correo.</P>
+                <View style={{ gap: 10 }}>
+                  <Button title={'Iniciar sesión'} onPress={() => { setExistsOpen(false); try { router.replace('/(auth)/sign-in' as any); } catch {} }} style={styles.button} />
+                  <Button title={'Usar otro correo'} onPress={() => setExistsOpen(false)} variant="outline" />
+                </View>
+              </Card>
+            </View>
+          </Modal>
         </CenterScaffold>
       </KeyboardAvoidingView>
     </Screen>
@@ -205,11 +237,12 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
+    marginTop: 20,
   },
   logo: {
-    width: 72,
-    height: 72,
+    width: 112,
+    height: 112,
   },
   center: {
     flex: 1,
@@ -237,6 +270,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.divider,
   },
   socialTextDark: {
     color: '#111827',
@@ -321,4 +356,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textDim,
     textAlign: 'center',
   },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  modalCard: { width: '100%', maxWidth: 420, padding: theme.spacing(2), borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
 });

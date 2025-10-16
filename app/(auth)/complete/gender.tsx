@@ -2,23 +2,25 @@ import React from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CenterScaffold } from '../../../components/Scaffold';
-import { Screen, Card, H1, P, Button, Switch } from '../../../components/ui';
+import { Screen, Card, H1, P, Button, Switch, SelectionTile, StickyFooterActions } from '../../../components/ui';
 import { theme } from '../../../lib/theme';
 import { useCompleteProfile } from '../../../lib/completeProfileContext';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 export default function StepGender() {
   const { draft, setDraft } = useCompleteProfile();
   const [showGender, setShowGender] = React.useState<boolean>(draft.show_gender ?? true);
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const returnTo = String((params as any)?.returnTo || '');
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
 
   const genders: Array<{ key: 'male' | 'female' | 'other'; label: string }> = [
-    { key: 'male', label: t('complete.male') },
-    { key: 'female', label: t('complete.female') },
-    { key: 'other', label: t('complete.other') },
+    { key: 'male', label: t('complete.male', 'Hombre') },
+    { key: 'female', label: t('complete.female', 'Mujer') },
+    { key: 'other', label: t('complete.other', 'Más allá del binario') },
   ];
 
   return (
@@ -27,36 +29,51 @@ export default function StepGender() {
   <CenterScaffold variant='auth' paddedTop={Math.max(insets.top, 60)}>
           <View style={[styles.progressWrap,{ top: insets.top + 8 }] }>
             <View style={styles.progressBg}>
-              <View style={[styles.progressFill, { width: `${(5/9)*100}%` }]} />
+              <View style={[styles.progressFill, { width: `${(4/10)*100}%` }]} />
             </View>
-            <P style={styles.progressText}>{t('complete.progress', { current: 5, total: 9 })}</P>
+            <P style={styles.progressText}>{t('complete.progress', { current: 4, total: 10 })}</P>
           </View>
           <View style={styles.center}>
-            <H1 style={styles.title}>{t('complete.genderTitle')}</H1>
-            <P style={styles.subtitle}>{t('complete.genderSubtitle')}</P>
+            <H1 style={styles.title}>{t('complete.genderTitle','¿Con qué género te identificas?')}</H1>
+            <P style={styles.subtitle}>{t('complete.genderSubtitle','Queremos mostrarte a las personas adecuadas.')}</P>
 
             <Card style={styles.card}>
-              <P style={{ color: theme.colors.textDim, fontSize:12, marginBottom:4 }}>{t('complete.genderVisibilityHint','Puedes ocultar tu género si prefieres.')}</P>
-              <View style={{ flexDirection:'row', alignItems:'center', gap:12, marginBottom:12 }}>
-                <View style={{ flexDirection:'row', alignItems:'center', gap:6 }}>
-                  <Switch value={showGender} onValueChange={(v)=> { setShowGender(v); setDraft(d=>({...d, show_gender:v})); }} />
-                  <P style={{ fontSize:12, color: theme.colors.textDim }}>{showGender ? t('complete.genderVisible','Género visible') : t('complete.genderHidden','Género oculto')}</P>
-                </View>
-              </View>
-              <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+              <View style={{ gap: 10 }}>
                 {genders.map((g) => {
                   const active = draft.gender === g.key;
                   return (
-                    <Button key={g.key} title={g.label} variant={active ? 'primary' : 'ghost'} onPress={() => setDraft((d) => ({ ...d, gender: g.key }))} />
+                    <SelectionTile
+                      key={g.key}
+                      active={active}
+                      label={g.label}
+                      indicator="radio"
+                      onPress={() => setDraft((d) => ({ ...d, gender: g.key }))}
+                    />
                   );
                 })}
               </View>
-              <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-                <Button title={t('common.back')} variant="ghost" onPress={() => router.push('(auth)/complete/seeking' as any)} />
-                <Button title={t('common.continue')} onPress={() => router.push('(auth)/complete/bio' as any)} />
+              <View style={{ marginTop: 12, gap: 8 }}>
+                <P style={{ color: theme.colors.textDim, fontSize:12 }}>{t('complete.genderShowQuestion','¿Quieres que se muestre el género en tu perfil?')}</P>
+                <View style={{ flexDirection:'row', alignItems:'center', gap:10 }}>
+                  <Switch value={showGender} onValueChange={(v)=> { setShowGender(v); setDraft(d=>({...d, show_gender:v})); }} />
+                  <P style={{ fontSize:12, color: theme.colors.textDim }}>{showGender ? t('complete.genderVisible','Mostrar en mi perfil') : t('complete.genderHidden','Ocultar en mi perfil')}</P>
+                </View>
               </View>
             </Card>
           </View>
+          <StickyFooterActions
+            actions={[
+              { title: t('common.continue'), onPress: () => {
+                if (!draft?.gender) return; // guard extra
+                if (returnTo === 'hub') {
+                  router.replace('(tabs)/profile' as any);
+                } else {
+                  router.push('(auth)/complete/seeking' as any);
+                }
+              }, disabled: !draft?.gender },
+              { title: t('common.back'), onPress: () => { if (returnTo === 'hub') router.replace('(tabs)/profile' as any); else router.push('(auth)/complete/birth' as any); }, variant: 'outline' },
+            ]}
+          />
   </CenterScaffold>
       </KeyboardAvoidingView>
     </Screen>

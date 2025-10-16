@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type FilterRange = 'today' | '7' | '30' | 'all';
 export type VenueType = 'all' | 'nightclub' | 'concert_hall' | 'festival';
@@ -34,6 +35,7 @@ export const useEventsFiltersStore = create<EventsFiltersState>()(
     {
       name: 'eventsFilters:v1',
       version: 1,
+      storage: createJSONStorage(() => AsyncStorage),
       onRehydrateStorage: () => (state) => {
         if (state) state._hasHydrated = true;
       },

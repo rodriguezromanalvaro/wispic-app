@@ -1,4 +1,5 @@
 // app/_layout.tsx
+import 'react-native-get-random-values';
 import { Slot } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '../lib/useAuth';
@@ -47,6 +48,15 @@ function InnerApp() {
 }
 
 export default function RootLayout() {
+  // Initialize Sentry after mount to avoid early module evaluation issues in dev
+  useEffect(() => {
+    (async () => {
+      try {
+        const { initSentry } = await import('../sentry');
+        await initSentry();
+      } catch {}
+    })();
+  }, []);
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>

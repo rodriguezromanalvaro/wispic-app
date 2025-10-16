@@ -2,12 +2,13 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View, SectionList, Dimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CenterScaffold } from '../../../components/Scaffold';
-import { Screen, Card, H1, P, Button } from '../../../components/ui';
+import { OnboardingHeader } from '../../../components/OnboardingHeader';
+import { Screen, Card, H1, P, Button, StickyFooterActions } from '../../../components/ui';
 import { PromptCard } from '../../../components/PromptCard';
 import { ProfilePreviewPane } from '../../../components/ProfilePreviewPane';
 import { theme } from '../../../lib/theme';
 import { useCompleteProfile } from '../../../lib/completeProfileContext';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { AVAILABLE_PROMPTS } from '../../../lib/prompts';
 import { supabase } from '../../../lib/supabase';
@@ -18,7 +19,10 @@ export default function StepPrompts() {
   const { draft, setDraft } = useCompleteProfile();
   const { user } = useAuth();
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const returnTo = String((params as any)?.returnTo || '');
   const { t, i18n } = useTranslation();
+  const isPostCompletion = String(params?.post || '') === '1';
   // Estado para templates dinámicos
   type Template = { id: number; key: string; type: string; choices: string[]; max_choices: number; question?: string | null; base?: string; icon?: string; categories?: { key:string; icon?: string; color?: string }[] };
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -30,6 +34,18 @@ export default function StepPrompts() {
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isWide = Dimensions.get('window').width > 920;
   const selectedGlobalCount = useMemo(() => Object.values(answers).reduce((acc, arr) => acc + (arr?.length || 0), 0), [answers]);
+  const MAX_TOTAL_CHOICES = 10; // límite global inspirado en la referencia
+  const canSelectMore = selectedGlobalCount < MAX_TOTAL_CHOICES;
+  // Número de preguntas (templates) con al menos una respuesta
+  const answeredQuestionsCount = useMemo(() => {
+    if (!templates?.length) return 0;
+    const keys = new Set(templates.map(t => t.key));
+    let n = 0;
+    for (const [k, arr] of Object.entries(answers)) {
+      if (keys.has(k) && Array.isArray(arr) && arr.length > 0) n++;
+    }
+    return n;
+  }, [answers, templates]);
 
   // Eliminado botón de refrescar manual; se mantiene carga automática por idioma
 
@@ -188,7 +204,16 @@ export default function StepPrompts() {
       .filter(([key, arr]) => Array.isArray(arr) && arr.length > 0 && templates.find(t => t.key === key));
     const filtered = selectedEntries.map(([key, arr]) => ({ key, answers: arr }));
     setDraft(d => ({ ...d, prompts: filtered }));
-    router.push('(auth)/complete/photos' as any);
+    if (returnTo === 'hub') {
+      // Guardar en draft y volver al hub
+      router.replace('(tabs)/profile' as any);
+    } else if (isPostCompletion) {
+      // Segunda parte: después de respuestas, pasamos a Bio
+      router.push({ pathname: '(auth)/complete/bio', params: { post: '1' } } as any);
+    } else {
+      // En flujo normal no debería usarse esta pantalla; por compat, redirigimos a Fotos
+      router.push('(auth)/complete/photos' as any);
+    }
   };
 
   // Construir secciones por primera categoría (o 'other')
@@ -209,42 +234,40 @@ export default function StepPrompts() {
   return (
     <Screen style={{ padding: 0, gap: 0 }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-  <CenterScaffold variant='auth' paddedTop={Math.max(insets.top, 20)}>
-          <View style={[styles.progressWrap,{ top: insets.top + 8 }] }>
-            <View style={styles.progressBg}>
-              <View style={[styles.progressFill, { width: `${(7/9)*100}%` }]} />
-            </View>
-            <P style={styles.progressText}>{t('complete.progress', { current: 7, total: 9 })}</P>
-          </View>
+  <CenterScaffold variant='auth' paddedTop={Math.max(insets.top, 60)}>
+          <OnboardingHeader step={isPostCompletion ? 11 : 9} total={isPostCompletion ? 12 : 10} />
           <View style={styles.center}>
-            <H1 style={styles.title}>{t('complete.promptsTitle')}</H1>
-            <P style={styles.subtitle}>{t('complete.promptsSubtitle')}</P>
-            <Card style={styles.card}>
-              <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom: 8 }}>
-                <P style={{ color: theme.colors.textDim, fontSize:12 }}>{t('complete.promptsSelected', '{{count}} seleccionadas', { count: selectedGlobalCount })}</P>
-                <View style={{ flexDirection:'row', gap:6, alignItems:'center' }}>
-                  <P style={{ color: theme.colors.textDim, fontSize:11 }}>
-                    {Object.values(answers).filter(a => a && a.length>0).length}/{templates.length} {t('complete.promptsAnswered', 'respondidas')}
-                  </P>
-                  <Button title={t('common.clearSelection', 'Vaciar selección')} variant="ghost" onPress={toggleSkipAll} disabled={loading} />
+            {/* Espacio fijo para no tocar barra ni texto del header */}
+            <View style={{ height: 96 }} />
+            <H1 style={styles.title}>{t('complete.promptsTitleFriendly','Cuéntanos un poco sobre ti')}</H1>
+            <P style={styles.subtitle}>{t('complete.promptsSubtitleFriendly','Elige cosas que te describan y con las que conectes. Tómalo con calma, es para que te conozcan mejor.')}</P>
+            <Card style={[styles.card, { marginBottom: 24 }]}>
+              <View style={styles.topMetaRow}>
+                <View style={styles.bigCounterPill}>
+                  <P style={styles.bigCounterText}>{answeredQuestionsCount}/{MAX_TOTAL_CHOICES} {t('complete.promptsAnswered','respondidas')}</P>
                 </View>
+                <Button title={t('common.clearSelection', 'Vaciar selección')} variant="outline" onPress={toggleSkipAll} disabled={loading} />
               </View>
+              {answeredQuestionsCount < 2 && (
+                <P style={{ color: theme.colors.danger || '#F97066', fontSize: 12, marginTop: 4, fontWeight: '700' }}>
+                  {t('complete.promptsMinTwo','Mínimo 2 para continuar')}
+                </P>
+              )}
               <SectionList
                 sections={sections.map(s => ({ title: s.title, icon: s.icon, color: s.color, data: s.data }))}
                 keyExtractor={(item) => item.key}
-                style={{ maxHeight: 360 }}
-                contentContainerStyle={{ paddingBottom: 12 }}
-                renderSectionHeader={({ section }) => (
-                  <View style={styles.sectionHeader}>
-                    <P style={[styles.sectionHeaderText]}>{section.icon ? section.icon + ' ' : ''}{t(`complete.category.${section.title}.title`, section.title)}</P>
-                  </View>
-                )}
+                style={{ maxHeight: 420 }}
+                contentContainerStyle={{ paddingBottom: 24 }}
+                renderSectionHeader={() => null}
                 renderItem={({ item: pr }) => {
                   const val = answers[pr.key] ?? [];
                   const tKey = `complete.prompt.${pr.key}`;
                   // Prioridad: 1) título DB localizado (pr.question) 2) i18n clave 3) base original
                   // We intentionally avoid i18n resource fallback to prevent mixing languages; rely solely on DB.
                   const title = pr.question || pr.base || pr.key;
+                  // Bloqueo global: máximo 10 preguntas respondidas. Se permite seguir añadiendo en
+                  // una pregunta ya respondida, pero no iniciar una nueva si ya hay 10.
+                  const blockNewForThisCard = answeredQuestionsCount >= MAX_TOTAL_CHOICES && val.length === 0;
                   return (
                     <PromptCard
                       title={title}
@@ -252,7 +275,8 @@ export default function StepPrompts() {
                       choices={pr.choices}
                       selected={val}
                       maxChoices={pr.max_choices || 1}
-                      colorAccent={pr.categories && pr.categories[0]?.color}
+                      colorAccent={undefined}
+                      disableNewSelection={blockNewForThisCard}
                       translateChoice={(choiceKey) => (pr as any).choicesLabels && (pr as any).choicesLabels[choiceKey] ? (pr as any).choicesLabels[choiceKey] : t(`${tKey}.answers.${choiceKey}`, choiceKey)}
                       onToggle={(choiceKey) => setAnswers(a => {
                         const current = a[pr.key] || [];
@@ -264,6 +288,10 @@ export default function StepPrompts() {
                           return { ...a, [pr.key]: updated };
                         }
                         if (!active && current.length >= maxC) return a;
+                        // Nuevo límite global: máximo 10 preguntas respondidas (no selecciones)
+                        const currentlyAnswered = Object.values(a).reduce((n, arr) => n + ((arr && (arr as any).length > 0) ? 1 : 0), 0);
+                        const isStartingNewQuestion = current.length === 0;
+                        if (isStartingNewQuestion && currentlyAnswered >= MAX_TOTAL_CHOICES) return a;
                         if (user?.id) enqueueTracking([{ user_id: user.id, prompt_template_id: pr.id, action: 'select', choice_key: choiceKey }]);
                         return { ...a, [pr.key]: [...current, choiceKey] };
                       })}
@@ -271,17 +299,20 @@ export default function StepPrompts() {
                   );
                 }}
               />
-              <View style={{ flexDirection:'row', gap:8, marginTop:12 }}>
-                <Button title={t('common.back')} variant="ghost" onPress={() => { router.push('(auth)/complete/bio' as any); }} />
-                <Button title={t('common.continue')} onPress={saveAndContinue} />
-              </View>
             </Card>
+            <View style={{ height: 32 }} />
             {isWide && (
               <View style={styles.previewPaneWrapper}>
                 <ProfilePreviewPane draft={{ ...draft, prompts: Object.entries(answers).map(([key, arr]) => ({ key, answers: arr })) }} />
               </View>
             )}
           </View>
+          <StickyFooterActions
+            actions={[
+              { title: isPostCompletion ? t('common.continue','Continuar') : `${t('common.continue')} ${answeredQuestionsCount}/${MAX_TOTAL_CHOICES}`, onPress: saveAndContinue, disabled: answeredQuestionsCount < 2 },
+              ...(isPostCompletion ? [] : [{ title: t('common.back'), onPress: () => { if (returnTo === 'hub') router.replace('(tabs)/profile' as any); else router.push('(auth)/complete/bio' as any); }, variant: 'outline' } as const])
+            ]}
+          />
   </CenterScaffold>
       </KeyboardAvoidingView>
     </Screen>
@@ -290,17 +321,19 @@ export default function StepPrompts() {
 
 const styles = StyleSheet.create({
   gradient: { flex: 1, paddingHorizontal: 20, paddingTop: 60, paddingBottom: 24 },
-  progressWrap: { position: 'absolute', top: 16, left: 20, right: 20, gap: 6 },
-  progressBg: { width: '100%', height: 6, backgroundColor: theme.colors.surface, borderRadius: 999, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: theme.colors.primary, borderRadius: 999 },
-  progressText: { color: theme.colors.textDim, fontSize: 12 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
+  // progress header migrated to OnboardingHeader
+  center: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', gap: 16 },
   title: { color: theme.colors.text, fontSize: 30, fontWeight: '800', textAlign: 'center' },
   subtitle: { color: theme.colors.subtext, fontSize: 16, textAlign: 'center', marginHorizontal: 12, marginBottom: 8 },
-  card: { width: '100%', maxWidth: 460, padding: theme.spacing(2), borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
+  card: { width: '100%', maxWidth: 520, padding: theme.spacing(2), borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
   // legacy inline prompt styles removed after integrating PromptCard
   sectionHeader: { paddingTop: 8, paddingBottom: 4 },
   sectionHeaderText: { color: theme.colors.text, fontWeight:'700', fontSize:14, letterSpacing:0.3 },
   previewPaneWrapper: { position:'absolute', top: 100, right: 20, width: 320 },
   modalWrap: { display:'none' },
+  topMetaRow: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom: 8 },
+  counterPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: theme.mode==='dark' ? 'rgba(255,255,255,0.06)' : '#F1F5F9', borderWidth: 1, borderColor: theme.colors.border },
+  counterText: { color: theme.colors.textDim, fontSize: 12 },
+  bigCounterPill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, backgroundColor: theme.mode==='dark' ? 'rgba(255,255,255,0.08)' : '#EEF2FF', borderWidth: 1, borderColor: (theme.mode==='dark' ? 'rgba(255,255,255,0.14)' : '#DDE3F0') },
+  bigCounterText: { color: theme.colors.text, fontWeight:'700', fontSize: 14 }
 });

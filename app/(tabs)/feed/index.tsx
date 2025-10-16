@@ -212,6 +212,13 @@ export default function FeedIndex() {
     refetch();
   }, [refetch]));
 
+  // Manual refresh to prevent auto-refetch spinner
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await refetch(); } finally { setRefreshing(false); }
+  }, [refetch]);
+
   // Realtime likes: refrescar pendientes cuando yo decido (liker = user.id) o alguien decide sobre mí (liked = user.id)
   useEffect(() => {
     if (!user) return;
@@ -274,7 +281,7 @@ export default function FeedIndex() {
     // Skeleton loader simple
     const skeletons = Array.from({ length: 4 });
     return (
-      <Screen style={{ padding:0 }}>
+  <Screen style={{ padding:0 }} edges={[]}>
         <GradientScaffold>
           <View style={{ flex:1, paddingTop:16, paddingHorizontal:16 }}>
             {skeletons.map((_,i) => (
@@ -291,15 +298,15 @@ export default function FeedIndex() {
   }
 
   return (
-    <Screen style={{ padding:0 }}>
+  <Screen style={{ padding:0 }} edges={[]}>
       <GradientScaffold>
         <AnimatedSectionList
           onScroll={onScroll}
           scrollEventThrottle={16}
           sections={sections}
           keyExtractor={(item:FeedItem) => String(item.id)}
-          refreshing={isRefetching}
-          onRefresh={refetch}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
           contentContainerStyle={{ paddingTop:16, paddingBottom:48, paddingHorizontal:16 }}
           SectionSeparatorComponent={() => <View style={{ height: theme.spacing(2) }} />}
           ItemSeparatorComponent={() => <View style={{ height: theme.spacing(1.5) }} />}

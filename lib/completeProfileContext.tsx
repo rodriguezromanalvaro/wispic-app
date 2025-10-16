@@ -20,12 +20,16 @@ export type ProfileDraft = {
   show_seeking?: boolean; // visibilidad de seeking
   // Nuevos campos (onboarding v2)
   relationship_status?: 'single' | 'inRelationship' | 'open' | 'itsComplicated' | 'preferNot';
+  show_relationship?: boolean; // visibilidad de la situación
   location_opt_in?: boolean;
   push_opt_in?: boolean;
+  camera_opt_in?: boolean;
   notify_messages?: boolean;
   notify_likes?: boolean;
   notify_friend_requests?: boolean;
   expo_push_token?: string | null;
+  // Fotos temporales del onboarding (URIs locales)
+  temp_photos?: string[];
 };
 
 type Ctx = {
@@ -34,6 +38,10 @@ type Ctx = {
   loading: boolean;
   loadFromSupabase: () => Promise<void>;
   saveToSupabase: () => Promise<boolean>;
+  patchProfile: (partial: Partial<Pick<ProfileDraft,
+    'location_opt_in' | 'push_opt_in' | 'camera_opt_in' |
+    'notify_messages' | 'notify_likes' | 'notify_friend_requests' | 'expo_push_token'
+  >>) => Promise<boolean>;
 };
 
 const CompleteProfileContext = createContext<Ctx | undefined>(undefined);
@@ -53,14 +61,30 @@ export function CompleteProfileProvider({ children }: { children: React.ReactNod
     seeking: [],
     show_seeking: true,
     relationship_status: undefined,
+  show_relationship: true,
     location_opt_in: false,
     push_opt_in: false,
+    camera_opt_in: false,
     notify_messages: true,
     notify_likes: true,
     notify_friend_requests: true,
     expo_push_token: null,
+    temp_photos: undefined,
   });
   const [loading, setLoading] = useState(false);
+
+  const patchProfile: Ctx['patchProfile'] = async (partial) => {
+    if (!user) return false;
+    try {
+      const update: any = { ...partial, updated_at: new Date().toISOString() };
+      const { error } = await supabase.from('profiles').update(update).eq('id', user.id);
+      if (error) throw error;
+      return true;
+    } catch (e) {
+      console.warn('[profiles.patch] failed', e);
+      return false;
+    }
+  };
 
   const loadFromSupabase = async () => {
     if (!user) return;
@@ -83,7 +107,8 @@ export function CompleteProfileProvider({ children }: { children: React.ReactNod
               .map((r: any) => ({ key: r.profile_prompt_templates.key, answers: Array.isArray(r.answer) ? r.answer : (typeof r.answer === 'string' ? [r.answer] : []) }));
           }
         } catch {}
-        setDraft({
+        setDraft((prev) => ({
+          ...prev,
           name: data.display_name || '',
           bio: data.bio || '',
           gender: (data.gender as Gender) ?? null,
@@ -95,13 +120,15 @@ export function CompleteProfileProvider({ children }: { children: React.ReactNod
           seeking: Array.isArray((data as any).seeking) ? (data as any).seeking : [],
           show_seeking: (data as any).show_seeking !== undefined ? !!(data as any).show_seeking : true,
           relationship_status: (data as any).relationship_status ?? undefined,
+          show_relationship: (data as any).show_relationship !== undefined ? !!(data as any).show_relationship : true,
           location_opt_in: (data as any).location_opt_in ?? false,
           push_opt_in: (data as any).push_opt_in ?? false,
+          camera_opt_in: (data as any).camera_opt_in ?? false,
           notify_messages: (data as any).notify_messages ?? true,
           notify_likes: (data as any).notify_likes ?? true,
           notify_friend_requests: (data as any).notify_friend_requests ?? true,
           expo_push_token: (data as any).expo_push_token ?? null,
-        });
+        }));
       }
     } finally {
       setLoading(false);
@@ -115,7 +142,7 @@ export function CompleteProfileProvider({ children }: { children: React.ReactNod
 
   const saveToSupabase = async (): Promise<boolean> => {
     if (!user) return false;
-  const { name, bio, gender, birthdate, prompts, interested_in, show_orientation, show_gender, seeking, show_seeking, relationship_status, location_opt_in, push_opt_in, notify_messages, notify_likes, notify_friend_requests, expo_push_token } = draft;
+  const { name, bio, gender, birthdate, prompts, interested_in, show_orientation, show_gender, seeking, show_seeking, relationship_status, show_relationship, location_opt_in, push_opt_in, notify_messages, notify_likes, notify_friend_requests, expo_push_token } = draft;
 
     if (!name.trim()) {
       Alert.alert(t('complete.nameRequiredTitle','Nombre requerido'), t('complete.nameRequiredBody','Debes introducir tu nombre visible'));
@@ -171,6 +198,7 @@ export function CompleteProfileProvider({ children }: { children: React.ReactNod
       show_gender: show_gender ?? true,
       show_seeking: show_seeking ?? true,
       relationship_status: relationship_status ?? null,
+  show_relationship: show_relationship ?? true,
       location_opt_in: !!location_opt_in,
       push_opt_in: !!push_opt_in,
       notify_messages: !!notify_messages,
@@ -206,7 +234,7 @@ export function CompleteProfileProvider({ children }: { children: React.ReactNod
     return true;
   };
 
-  const value = useMemo(() => ({ draft, setDraft, loading, loadFromSupabase, saveToSupabase }), [draft, loading]);
+  const value = useMemo(() => ({ draft, setDraft, loading, loadFromSupabase, saveToSupabase, patchProfile }), [draft, loading]);
   return <CompleteProfileContext.Provider value={value}>{children}</CompleteProfileContext.Provider>;
 }
 

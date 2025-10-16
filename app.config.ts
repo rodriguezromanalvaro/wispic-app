@@ -15,7 +15,8 @@ const config: ExpoConfig = {
     supportsTablet: false,
     // ❌ sin icon iOS
     bundleIdentifier: 'com.wispic.app',
-    usesAppleSignIn: true,
+    // Apple Sign-In deshabilitado
+    // usesAppleSignIn: true,
     infoPlist: {
       NSLocationWhenInUseUsageDescription:
         'Necesitamos tu ubicación para mostrar eventos cercanos y mejorar la experiencia.',
@@ -40,8 +41,8 @@ const config: ExpoConfig = {
   android: {
     // ❌ sin adaptiveIcon para evitar procesado de PNGs
     package: 'com.wispic.app',
-    // Evita que el teclado tape el contenido en Android
-    softwareKeyboardLayoutMode: 'pan',
+  // Usamos resize para que el sistema reduzca la altura disponible y nosotros NO dupliquemos desplazamientos
+  softwareKeyboardLayoutMode: 'resize',
     permissions: [
       'ACCESS_COARSE_LOCATION',
       'ACCESS_FINE_LOCATION',
@@ -53,10 +54,10 @@ const config: ExpoConfig = {
   ],
   ...(fs.existsSync('./google-services.json') ? { googleServicesFile: './google-services.json' } : {}),
     adaptiveIcon: {
-      // Foreground 1024x1024 con transparencia
+      // Foreground 1024x1024 con transparencia (negro o blanco en PNG)
       foregroundImage: './assets/adaptive-icon-foreground.png',
-      // Background 1080x1080 sin transparencia
-      backgroundImage: './assets/adaptive-icon-background.png',
+      // Fondo sólido con un tono suave usado en la paleta de usuario (magenta soft)
+      backgroundColor: '#FFF5F7',
     },
     config: {
       googleMaps: {
@@ -74,7 +75,7 @@ const config: ExpoConfig = {
     'expo-location',
     'expo-camera',
     'sentry-expo',
-    'expo-apple-authentication',
+    // 'expo-apple-authentication',
     [
       'expo-build-properties',
       {

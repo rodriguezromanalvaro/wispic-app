@@ -5,7 +5,7 @@ import * as FileSystem from 'expo-file-system';
 import { decode as decodeBase64 } from 'base64-arraybuffer';
 import { useToast } from '../../../lib/toast';
 
-interface UpdateBasicsInput { display_name?: string; bio?: string; interested_in?: string[]; seeking?: string[]; gender?: string|null; }
+interface UpdateBasicsInput { display_name?: string; bio?: string; interested_in?: string[]; seeking?: string[]; gender?: string|null; city?: string | null }
 interface UpdateVisibilityInput { show_gender?: boolean; show_orientation?: boolean; show_seeking?: boolean; }
 interface UpsertPromptInput { id?: number|string; prompt_id: number; response: string | string[]; }
 interface DeletePromptInput { id: number|string; }
@@ -30,17 +30,25 @@ export function useProfileMutations(profileId?: string) {
             bio: input.bio ?? prev.bio,
             interested_in: input.interested_in ?? prev.interested_in,
             seeking: input.seeking ?? prev.seeking,
-            gender: input.gender !== undefined ? input.gender : prev.gender
+            gender: input.gender !== undefined ? input.gender : prev.gender,
+            city: input.city !== undefined ? input.city : (prev as any).city,
         });
       }
       return { prev };
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.prev) qc.setQueryData(['profile:full', profileId], ctx.prev);
-      toast.show('Error updating basics', 'error');
+      toast.show('Error al actualizar', 'error');
     },
-    onSuccess: () => {
-      toast.show('Profile updated', 'success');
+    onSuccess: (_data, vars) => {
+      const msgs: string[] = [];
+      if (vars && 'gender' in vars) msgs.push('Género actualizado');
+      if (vars && 'interested_in' in vars) msgs.push('Sexualidad actualizada');
+      if (vars && 'seeking' in vars) msgs.push('Busco actualizado');
+      if (vars && 'display_name' in vars) msgs.push('Nombre actualizado');
+      if (vars && 'bio' in vars) msgs.push('Bio actualizada');
+      if (vars && 'city' in vars) msgs.push('Ubicación actualizada');
+      toast.show(msgs.length ? msgs.join(' · ') : 'Perfil actualizado', 'success');
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ['profile:full', profileId] });
@@ -63,10 +71,14 @@ export function useProfileMutations(profileId?: string) {
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.prev) qc.setQueryData(['profile:full', profileId], ctx.prev);
-      toast.show('Error updating visibility', 'error');
+      toast.show('Error al actualizar visibilidad', 'error');
     },
-    onSuccess: () => {
-      toast.show('Visibility updated', 'success');
+    onSuccess: (_data, vars) => {
+      const msgs: string[] = [];
+      if (vars && 'show_gender' in vars) msgs.push('Visibilidad del género actualizada');
+      if (vars && 'show_orientation' in vars) msgs.push('Visibilidad de la sexualidad actualizada');
+      if (vars && 'show_seeking' in vars) msgs.push('Visibilidad de “Busco” actualizada');
+      toast.show(msgs.length ? msgs.join(' · ') : 'Visibilidad actualizada', 'success');
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ['profile:full', profileId] });

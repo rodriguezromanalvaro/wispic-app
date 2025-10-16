@@ -40,12 +40,15 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         pointerEvents="none"
         accessibilityLiveRegion="polite"
         accessible
-        style={{ position:'absolute', bottom:40, left:0, right:0, opacity: anim, transform:[{ translateY: anim.interpolate({ inputRange:[0,1], outputRange:[20,0] }) }], alignItems:'center' }}>
-        {toasts.map(t => (
-          <View key={t.id} style={{ backgroundColor: t.type === 'error' ? theme.colors.danger : t.type === 'success' ? theme.colors.positive : theme.colors.card, paddingHorizontal:16, paddingVertical:12, borderRadius:24, marginTop:8, maxWidth:'80%' }}>
-            <Text style={{ color: theme.colors.text }}>{t.message}</Text>
+        style={{ position:'absolute', left:0, right:0, top:0, bottom:0, opacity: anim, alignItems:'center', justifyContent:'center' }}>
+        {toasts.length > 0 && (
+          <View style={{ alignItems:'center', justifyContent:'center', padding:20, borderRadius:16, backgroundColor: 'rgba(0,0,0,0.6)', maxWidth: '80%' }}>
+            <Text style={{ fontSize: 28, textAlign:'center', marginBottom:8 }}>
+              {toasts[toasts.length-1].type === 'success' ? '✅' : toasts[toasts.length-1].type === 'error' ? '⚠️' : 'ℹ️'}
+            </Text>
+            <Text style={{ color: '#fff', fontSize: 16, textAlign:'center' }}>{toasts[toasts.length-1].message}</Text>
           </View>
-        ))}
+        )}
       </Animated.View>
     </ToastContext.Provider>
   );

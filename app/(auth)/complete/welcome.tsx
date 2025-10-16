@@ -1,7 +1,7 @@
 import { KeyboardAvoidingView, Platform, StyleSheet, View, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CenterScaffold } from '../../../components/Scaffold';
-import { Screen, Card, H1, P, Button } from '../../../components/ui';
+import { Screen, H1, P, Button } from '../../../components/ui';
 import { theme } from '../../../lib/theme';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -22,12 +22,18 @@ export default function StepWelcome() {
             <P style={styles.progressText}>{t('complete.progress', { current: 1, total: 10 })}</P>
           </View>
           <View style={styles.center}>
-            <H1 style={styles.title}>{t('welcome.title','¡Te damos la bienvenida!')}</H1>
+            <Image source={require('../../../assets/adaptive-icon-foreground.png')} style={styles.logo} resizeMode="contain" />
+            <H1 style={styles.title}>{t('welcome.title','¡Te damos la bienvenida a Wispic!')}</H1>
             <P style={styles.subtitle}>{t('welcome.subtitle','Vamos a configurar tu perfil en unos pasos rápidos.')}</P>
-            <Card style={styles.card}>
-              <P style={{ color: theme.colors.textDim, textAlign:'center' }}>{t('welcome.body','Te pediremos algunos datos básicos, preferencias y una foto para empezar.')}</P>
-              <Button title={t('welcome.cta','Empezar')} onPress={() => router.push('(auth)/complete/name' as any)} style={{ marginTop: 12 }} />
-            </Card>
+            <P style={{ color: theme.colors.textDim, textAlign:'center', marginHorizontal: 12 }}>
+              {t('welcome.body','Te pediremos algunos datos básicos y una foto para empezar.')}
+            </P>
+            <Button
+              title={t('welcome.cta','¡Vamos!')}
+              onPress={() => router.push('(auth)/complete/name' as any)}
+              size="lg"
+              style={{ marginTop: 16, minWidth: 260, alignSelf: 'stretch', marginHorizontal: 20 }}
+            />
           </View>
         </CenterScaffold>
       </KeyboardAvoidingView>
@@ -41,6 +47,7 @@ const styles = StyleSheet.create({
   progressFill: { height: '100%', backgroundColor: theme.colors.primary, borderRadius: 999 },
   progressText: { color: theme.colors.textDim, fontSize: 12 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
+  logo: { width: 56, height: 56 },
   title: { color: theme.colors.text, fontSize: 30, fontWeight: '800', textAlign: 'center' },
   subtitle: { color: theme.colors.subtext, fontSize: 16, textAlign: 'center', marginHorizontal: 12, marginBottom: 8 },
   card: { width: '100%', maxWidth: 420, padding: theme.spacing(2), borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },

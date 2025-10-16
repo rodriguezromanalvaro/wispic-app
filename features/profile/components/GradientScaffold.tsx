@@ -1,6 +1,6 @@
 import React from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
-import { View, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { theme } from '../../../lib/theme';
 
 interface GradientScaffoldProps {
@@ -8,11 +8,14 @@ interface GradientScaffoldProps {
 }
 
 export const GradientScaffold: React.FC<GradientScaffoldProps> = ({ children }) => {
+  const colors = theme.mode === 'dark'
+    ? (theme.gradients.dark as [string, string])
+    : (theme.gradients.appBg as [string, string, string]);
   return (
     <LinearGradient
-      colors={theme.gradients.dark as [string, string, string]}
-      start={{ x: 0.2, y: 0 }}
-      end={{ x: 0.8, y: 1 }}
+      colors={colors as any}
+      start={{ x: 0.1, y: 0 }}
+      end={{ x: 0.9, y: 1 }}
       style={styles.gradient}
     >
       {children}
@@ -21,5 +24,5 @@ export const GradientScaffold: React.FC<GradientScaffoldProps> = ({ children }) 
 };
 
 const styles = StyleSheet.create({
-  gradient: { flex:1 }
+  gradient: { flex: 1 },
 });

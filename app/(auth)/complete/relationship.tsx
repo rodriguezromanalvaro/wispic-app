@@ -1,10 +1,10 @@
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CenterScaffold } from '../../../components/Scaffold';
-import { Screen, Card, H1, P, Button } from '../../../components/ui';
+import { Screen, Card, H1, P, Button, SelectionTile, StickyFooterActions, Switch } from '../../../components/ui';
 import { theme } from '../../../lib/theme';
 import { useCompleteProfile } from '../../../lib/completeProfileContext';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 const OPTIONS: { key: 'single'|'inRelationship'|'open'|'itsComplicated'|'preferNot'; label: string }[] = [
@@ -19,9 +19,12 @@ export default function StepRelationship() {
   const insets = useSafeAreaInsets();
   const { draft, setDraft } = useCompleteProfile();
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const returnTo = String((params as any)?.returnTo || '');
   const { t } = useTranslation();
 
   const selected = (draft as any).relationship_status as string | undefined;
+  const visible = (draft as any).show_relationship ?? true;
 
   return (
     <Screen style={{ padding: 0, gap: 0 }}>
@@ -29,28 +32,41 @@ export default function StepRelationship() {
         <CenterScaffold variant="auth" paddedTop={Math.max(insets.top, 60)}>
           <View style={[styles.progressWrap, { top: insets.top + 8 }]}>
             <View style={styles.progressBg}>
-              <View style={[styles.progressFill, { width: `${(5/10)*100}%` }]} />
+              <View style={[styles.progressFill, { width: `${(7/10)*100}%` }]} />
             </View>
-            <P style={styles.progressText}>{t('complete.progress', { current: 5, total: 10 })}</P>
+            <P style={styles.progressText}>{t('complete.progress', { current: 7, total: 10 })}</P>
           </View>
           <View style={styles.center}>
             <H1 style={styles.title}>{t('relationship.title','¿Cuál es tu situación?')}</H1>
             <P style={styles.subtitle}>{t('relationship.subtitle','Nos ayuda a ajustar tus recomendaciones.')}</P>
             <Card style={styles.card}>
-              <View style={{ flexDirection:'row', flexWrap:'wrap', gap:8 }}>
+              <View style={{ gap: 10 }}>
                 {OPTIONS.map(o => {
                   const active = selected === o.key;
                   return (
-                    <Button key={o.key} title={t(`relationship.${o.key}`, o.label)} variant={active ? 'primary' : 'ghost'} onPress={() => setDraft(d => ({ ...d, relationship_status: o.key as any }))} />
+                      <SelectionTile
+                      key={o.key}
+                        active={active}
+                        label={t(`relationship.${o.key}`, o.label)}
+                        indicator="radio"
+                        onPress={() => setDraft(d => ({ ...d, relationship_status: o.key as any }))}
+                    />
                   );
                 })}
               </View>
-              <View style={{ flexDirection:'row', gap:8, marginTop:12 }}>
-                <Button title={t('common.back')} variant="ghost" onPress={() => router.push('(auth)/complete/gender' as any)} />
-                <Button title={t('common.continue')} disabled={!selected} onPress={() => router.push('(auth)/complete/seeking' as any)} />
+              <P style={{ color: theme.colors.textDim, fontSize:12, marginTop:12 }}>{t('complete.visibilityQuestion','¿Quieres que esto se muestre en tu perfil?')}</P>
+              <View style={{ flexDirection:'row', alignItems:'center', marginTop:8, gap:8 }}>
+                <Switch value={!!visible} onValueChange={(v)=> setDraft(d => ({ ...d, show_relationship: v }))} />
+                <P style={{ color: theme.colors.textDim, fontSize:12 }}>{visible ? t('complete.visible','Mostrar en mi perfil') : t('complete.hidden','Ocultar en mi perfil')}</P>
               </View>
             </Card>
           </View>
+          <StickyFooterActions
+            actions={[
+              { title: t('common.continue'), onPress: () => { if (returnTo === 'hub') router.replace('(tabs)/profile' as any); else router.push('(auth)/complete/permissions' as any); }, disabled: !selected },
+              { title: t('common.back'), onPress: () => { if (returnTo === 'hub') router.replace('(tabs)/profile' as any); else router.push('(auth)/complete/orientation' as any); }, variant: 'outline' },
+            ]}
+          />
         </CenterScaffold>
       </KeyboardAvoidingView>
     </Screen>

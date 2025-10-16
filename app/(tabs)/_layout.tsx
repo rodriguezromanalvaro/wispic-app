@@ -77,15 +77,24 @@ export default function TabLayout() {
     if (!pathname) return { headerVariant: 'brand', isRootTab: true } as const;
     const segments = pathname.split('/').filter(Boolean);
     const ROOT_TABS = ['events','feed','chat','profile'];
+    // Si no hay segmentos ("/"), tratar como raíz de tabs (brand)
+    if (segments.length === 0) return { headerVariant: 'brand', isRootTab: true } as const;
     const isRoot = segments.length === 1 && ROOT_TABS.includes(segments[0]);
     return { headerVariant: isRoot ? 'brand' : 'sub', isRootTab: isRoot } as const;
+  }, [pathname]);
+
+  // Ocultar header de Tabs dentro de /chat/[matchId] para que el hilo dibuje su propio header estable
+  const hideHeaderForChatThread = useMemo(() => {
+    const parts = pathname.split('/').filter(Boolean);
+    // pattern: chat / {matchId}
+    return parts.length === 2 && parts[0] === 'chat';
   }, [pathname]);
 
   const derivedTitle = useMemo(() => {
     if (headerVariant === 'brand') return <LogoTitle />;
     // For now basic mapping: show capitalized second segment
-    const parts = pathname.split('/').filter(Boolean);
-    const leaf = parts[parts.length - 1];
+    const parts = (pathname || '').split('/').filter(Boolean);
+    const leaf = parts[parts.length - 1] || '';
     // Simple heuristics
     if (/^\d+$/.test(leaf)) {
       if (parts.includes('events')) return 'Evento';
@@ -94,6 +103,7 @@ export default function TabLayout() {
       }
     }
     if (parts.includes('chat')) return 'Chat';
+    if (!leaf) return 'Inicio';
     return leaf.replace(/[-_]/g, ' ').replace(/^(\w)/, c => c.toUpperCase());
   }, [headerVariant, pathname, eventTitleCache]);
 
@@ -131,23 +141,12 @@ export default function TabLayout() {
     </Pressable>
   ) : undefined;
 
-  // headerRight: sólo logout en profile root (sin placeholder, ya que pedimos títulos a la izquierda)
+  // headerRight: reservado (por ahora nada) en profile root
   const headerRightComponent = (() => {
     if (headerVariant !== 'brand') return undefined;
     const first = pathname.split('/').filter(Boolean)[0] || '';
     if (first === 'profile') {
-      return () => (
-        <Pressable
-          accessibilityLabel="Cerrar sesión"
-          onPress={async () => {
-            try { await supabase.auth.signOut(); router.replace('/(auth)/sign-in'); } catch {}
-          }}
-          style={{ paddingHorizontal:12, paddingVertical:6, borderRadius:18, flexDirection:'row', alignItems:'center', gap:6, backgroundColor: dynTheme.colors.card, borderWidth:1, borderColor: dynTheme.colors.border }}
-        >
-          <Ionicons name="log-out-outline" size={18} color={dynTheme.colors.text} />
-          <Text style={{ color: dynTheme.colors.text, fontWeight:'700', fontSize:13 }}>Cerrar sesión</Text>
-        </Pressable>
-      );
+      return undefined;
     }
     return undefined;
   })();
@@ -157,16 +156,37 @@ export default function TabLayout() {
     queryKey: ['unread-count', user?.id],
     queryFn: async () => {
       if (!user) return 0;
+      // 1) Fetch matches for this user
       const { data: matches, error } = await supabase
         .from('matches')
-        .select('id, user_a, user_b, last_message_at, last_read_a, last_read_b')
+        .select('id, user_a, user_b, last_message_at')
         .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
-      if (error || !matches) return 0;
+      if (error || !matches || matches.length === 0) return 0;
+
+      const matchIds = (matches as any[]).map((m:any) => m.id);
+      // 2) Fetch my read rows for these matches
+      const { data: reads } = await supabase
+        .from('match_reads')
+        .select('match_id,last_read_at')
+        .eq('user_id', user.id)
+        .in('match_id', matchIds);
+      const mapReads = new Map<number, string>((reads || []).map((r:any) => [r.match_id, r.last_read_at]));
+
+      // 3) Fetch recent messages across these matches and count those from others after my last_read
+      const { data: msgs } = await supabase
+        .from('messages')
+        .select('id,match_id,sender,created_at')
+        .in('match_id', matchIds)
+        .order('created_at', { ascending: false })
+        .limit(Math.min(matchIds.length * 50, 1000));
+      if (!msgs || msgs.length === 0) return 0;
 
       let total = 0;
-      for (const m of matches) {
-        const myRead = m.user_a === user.id ? m.last_read_a : m.last_read_b;
-        if (m.last_message_at && (!myRead || m.last_message_at > myRead)) total += 1;
+      for (const m of msgs as any[]) {
+        const myRead = mapReads.get(m.match_id) || null;
+        if (m.sender !== user.id && (!myRead || m.created_at > myRead)) {
+          total += 1;
+        }
       }
       return total;
     },
@@ -175,20 +195,29 @@ export default function TabLayout() {
   // 1) Refresca cuando la pestaña recupera el foco
   useFocusEffect(React.useCallback(() => { refetch(); }, [refetch]));
 
-  // 2) Realtime: si cambia matches (nuevo mensaje o leído), refrescar
+  // 2) Realtime: refrescar ante cambios relevantes
   useEffect(() => {
     if (!user) return;
-    const ch = supabase
-      .channel('unread-badge')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, () => refetch())
+    const onChange = () => refetch();
+    const ch1 = supabase
+      .channel('unread-badge-matches')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, onChange)
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
+    const ch2 = supabase
+      .channel('unread-badge-messages')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, onChange)
+      .subscribe();
+    const ch3 = supabase
+      .channel('unread-badge-reads')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'match_reads', filter: `user_id=eq.${user.id}` }, onChange)
+      .subscribe();
+    return () => { supabase.removeChannel(ch1); supabase.removeChannel(ch2); supabase.removeChannel(ch3); };
   }, [user?.id, refetch]);
 
   return (
     <Tabs
       screenOptions={{
-        headerShown: true,
+        headerShown: !hideHeaderForChatThread,
         headerTitle: headerTitleComponent,
         headerLeft: headerLeftComponent,
         headerRight: headerRightComponent,
