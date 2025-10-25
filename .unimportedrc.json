@@ -4,6 +4,7 @@
     "app/index.tsx"
   ],
   "ignorePatterns": [
+    "app/**",
     "**/__tests__/**",
     "**/*.test.ts",
     "**/*.test.tsx",
