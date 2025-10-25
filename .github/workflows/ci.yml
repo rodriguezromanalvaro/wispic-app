@@ -25,6 +25,9 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
+      - name: Unused check (non-fatal)
+        run: npm run typecheck:unused || true
+
       - name: Lint (non-fatal)
         run: npm run lint || true
 
