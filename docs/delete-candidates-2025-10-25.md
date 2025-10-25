@@ -32,6 +32,11 @@ Keep (in use)
 - components/TopBar.tsx — used by events series page and legacy prev_events_index.tsx.
 - components/AvatarStack.tsx — used by EventCard/LocalCard.
 
+Further safe removals (Applied — 2025-10-25)
+- components/design/SegmentedControl.tsx and components/design/index.ts — not imported anywhere; BlendHeaderBackground remains and is imported directly.
+- components/location/CityPickerSheet.tsx — no imports left (replaced flows); only referenced in a comment.
+- components/Badge.tsx — no references found.
+
 ## lib (logic/utils)
 
 Safe to remove (Risk Low)
@@ -59,6 +64,9 @@ Keep (in use)
 - lib/theme.ts & lib/theme-context.tsx — used in app/_layout.tsx.
 - lib/stores/eventsFilters.ts — used by events.
 - lib/toast.tsx — used by app/_layout.tsx.
+
+Further safe removals (Applied — 2025-10-25)
+- lib/utils.ts — no references across the codebase.
 
 ## features/profile — UI set not wired to routes (likely dead)
 

@@ -123,3 +123,14 @@ Rationale:
 - `app/(tabs)/profile.tsx` and `app/profile/photos.tsx` implement the active UI and only depend on hooks under `features/profile/hooks/*` (kept).
 
 Validation gates after deletion: Typecheck PASS, Lint PASS, Tests PASS.
+
+## Round 4 — 2025-10-25
+
+Additional safe deletions (unreferenced):
+
+- components/design/SegmentedControl.tsx and components/design/index.ts — unused; BlendHeaderBackground kept and imported directly.
+- components/location/CityPickerSheet.tsx — no imports remain; only referenced in a comment.
+- components/Badge.tsx — unused.
+- lib/utils.ts — unused.
+
+Validation gates: Typecheck PASS, Lint PASS, Tests PASS.
