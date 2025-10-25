@@ -1,0 +1,41 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "entry": [
+    "app/_layout.tsx",
+    "app/index.tsx",
+    "app/**/*.tsx",
+    "app/**/*.ts",
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "features/**/*.ts",
+    "features/**/*.tsx",
+    "lib/**/*.ts",
+    "lib/**/*.tsx"
+  ],
+  "project": [
+    "app",
+    "components",
+    "features",
+    "lib"
+  ],
+  "ignore": [
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.d.ts",
+    "**/android/**",
+    "**/ios/**",
+    "**/build/**",
+    "**/dist/**",
+    "**/vendor/**",
+    "**/backups/**",
+    "**/docs/**",
+    "advisor_report/**",
+    "supabase/**",
+    "scripts/**"
+  ],
+  "ignoreDependencies": [
+    "react-native-web",
+    "react-dom"
+  ]
+}
