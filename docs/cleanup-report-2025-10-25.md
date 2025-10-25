@@ -134,3 +134,15 @@ Additional safe deletions (unreferenced):
 - lib/utils.ts — unused.
 
 Validation gates: Typecheck PASS, Lint PASS, Tests PASS.
+
+### Deps pruning (Round 4)
+
+Removed unused packages:
+- @tamagui/button (no usages; kept @tamagui/stacks/core for BlendHeaderBackground)
+- react-native-draggable-flatlist (no usages after profile UI cleanup)
+- devDependencies: @eslint/js, eslint-config-prettier, globals, supabase (not referenced by config)
+
+Kept (though flagged by depcheck) because used via app.config.ts plugins or dev flows:
+- expo-build-properties, expo-updates, expo-dev-client
+
+Gates after pruning: Typecheck PASS, Lint PASS, Tests PASS.
