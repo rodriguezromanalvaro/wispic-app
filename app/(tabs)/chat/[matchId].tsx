@@ -19,10 +19,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../lib/useAuth';
-import { Screen, Card, Button } from '../../../components/ui';
+import { Screen, Card } from '../../../components/ui';
 import { theme } from '../../../lib/theme';
 import Animated from 'react-native-reanimated';
-import { GradientScaffold } from '../../../features/profile/components/GradientScaffold';
+// (using existing View import)
 import { pickEmptyPrompt } from '../../../features/chat/emptyPrompts';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -262,7 +262,7 @@ export default function ChatThread() {
       if (error) throw error;
       return data as any;
     },
-    refetchInterval: 5000, // poll suave para receipts
+    refetchInterval: 1200, // polling más ágil por si Realtime no está activo
   });
 
   // Realtime para actualizaciones de last_read_at (reduce latencia de ticks azules)
@@ -273,6 +273,11 @@ export default function ChatThread() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'match_reads', filter: `match_id=eq.${mid}` }, (payload: any) => {
         if (payload.new?.user_id === otherUserId) {
           // Invalida cache para forzar relectura rápida
+          qc.invalidateQueries({ queryKey: ['match-read', mid, otherUserId] });
+        }
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'match_reads', filter: `match_id=eq.${mid}` }, (payload: any) => {
+        if (payload.new?.user_id === otherUserId) {
           qc.invalidateQueries({ queryKey: ['match-read', mid, otherUserId] });
         }
       })
@@ -347,21 +352,62 @@ export default function ChatThread() {
     lastReadWrite.current = now;
     try {
       await supabase.from('match_reads')
-        .upsert({ match_id: mid, user_id: user.id, last_read_at: new Date().toISOString() })
+        .upsert({ match_id: mid, user_id: user.id, last_read_at: new Date().toISOString() }, { onConflict: 'match_id,user_id' })
         .select();
-      qc.invalidateQueries({ queryKey: ['matches-enriched3', user.id] });
+      // Invalida queries relacionadas con contadores y lista de chats
+      qc.invalidateQueries({ queryKey: ['matches-enriched-unread', user.id] });
       qc.invalidateQueries({ queryKey: ['unread-count', user.id] });
     } catch (e:any) {
       console.warn('Error markRead', e);
     }
   }, [match?.id, user?.id]);
 
+  // Versión inmediata (sin debounce) para usar al salir de la pantalla
+  const markReadImmediate = useCallback(async () => {
+    if (!match || !user) return;
+    try {
+      await supabase.from('match_reads')
+        .upsert({ match_id: mid, user_id: user.id, last_read_at: new Date().toISOString() }, { onConflict: 'match_id,user_id' })
+        .select();
+      qc.invalidateQueries({ queryKey: ['matches-enriched-unread', user.id] });
+      qc.invalidateQueries({ queryKey: ['unread-count', user.id] });
+    } catch (e:any) {
+      console.warn('Error markReadImmediate', e);
+    }
+  }, [match?.id, user?.id]);
+
   // 4) Marcar leído al entrar + cuando se agregan mensajes y estás abajo
   useEffect(() => { markRead(); }, [match?.id, user?.id]);
+  // Además, al entrar en el hilo, limpiar notificaciones presentadas de este hilo
+  useFocusEffect(useCallback(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const Notifications = await import('expo-notifications');
+        const list = await Notifications.getPresentedNotificationsAsync();
+        const toDismiss = (list || []).filter((n: any) => {
+          const d = (n?.request?.content?.data || {}) as any;
+          const t = d?.type;
+          const m = Number(typeof d?.match_id === 'string' ? Number(d.match_id) : d?.match_id);
+          return t === 'message' && Number.isFinite(m) && m === mid;
+        });
+        for (const n of toDismiss) {
+          if (cancelled) break;
+          await Notifications.dismissNotificationAsync(n.request.identifier);
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [mid]));
   useEffect(() => {
     if (!messages || messages.length === 0) return;
     if (atBottomRef.current) markRead();
   }, [messages?.length]);
+
+  // Al salir/ocultar la pantalla, forzar escritura inmediata para que la lista refleje leído
+  useFocusEffect(useCallback(() => {
+    return () => { markReadImmediate(); };
+  }, [markReadImmediate]));
 
   // 5) Realtime unificado: mensajes nuevos + updates de lectura
   useEffect(() => {
@@ -563,11 +609,11 @@ export default function ChatThread() {
   if (loadingMatch || loadingMsgs) {
     return (
   <Screen style={{ padding:0 }} edges={['top']}>
-        <GradientScaffold>
+    <View style={{ flex:1, backgroundColor: theme.colors.bg }}>
           <View style={{ flex:1, paddingTop:16, alignItems:'center' }}>
             <ActivityIndicator style={{ marginTop:40 }} color={theme.colors.primary} />
           </View>
-        </GradientScaffold>
+    </View>
       </Screen>
     );
   }
@@ -575,11 +621,11 @@ export default function ChatThread() {
   if (!match) {
     return (
   <Screen style={{ padding:0 }} edges={[]}>
-        <GradientScaffold>
+    <View style={{ flex:1, backgroundColor: theme.colors.bg }}>
           <View style={{ flex:1, paddingTop:16 }}>
             <Card style={{ margin:16 }}><Text style={{ color: theme.colors.text }}>Chat no encontrado.</Text></Card>
           </View>
-        </GradientScaffold>
+    </View>
       </Screen>
     );
   }
@@ -674,6 +720,7 @@ export default function ChatThread() {
       keyExtractor={(m:any, idx:number) => `${m.id}_${new Date(m.created_at).getTime()}_${idx}`}
       refreshing={loadingOlder}
       onRefresh={() => loadOlder()}
+    showsVerticalScrollIndicator={false}
   contentContainerStyle={{ paddingTop: 4, paddingBottom: listContentPaddingBottom, paddingHorizontal:12 }}
       renderItem={({ item }: any) => {
   const mine = item.sender === user?.id;
@@ -856,7 +903,7 @@ export default function ChatThread() {
   const AndroidBody = (
     <KeyboardAvoidingView style={{ flex:1 }} behavior="height" >
       <Screen style={{ padding:0 }} edges={[]}> 
-        <GradientScaffold>
+  <View style={{ flex:1, backgroundColor: theme.colors.bg }}>
           <View style={{ flex:1 }}>
             {InnerHeader}
             <View style={{ flex:1 }}>
@@ -865,14 +912,14 @@ export default function ChatThread() {
             {Composer}
             {EmojiPanel}
           </View>
-        </GradientScaffold>
+  </View>
       </Screen>
     </KeyboardAvoidingView>
   );
 
   const IOSBody = (
     <Screen style={{ padding:0 }} edges={[]}>
-      <GradientScaffold>
+  <View style={{ flex:1, backgroundColor: theme.colors.bg }}>
         <View style={{ flex:1 }}>
           {ListComponent}
           {hasMore && (
@@ -885,7 +932,7 @@ export default function ChatThread() {
           {Composer}
           {EmojiPanel}
         </View>
-      </GradientScaffold>
+  </View>
     </Screen>
   );
 

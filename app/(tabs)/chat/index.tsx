@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Text, View, Pressable, Image } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { FlatList, Text, View, Pressable, Image } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../lib/useAuth';
 import { Screen, Card } from '../../../components/ui';
-import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
-import { GradientScaffold } from '../../../features/profile/components/GradientScaffold';
+import Animated, { useAnimatedScrollHandler } from 'react-native-reanimated';
+import { CenterScaffold } from '../../../components/Scaffold';
+import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../../lib/theme';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 
@@ -223,6 +223,13 @@ export default function ChatList() {
 
   // Refresh when the tab/screen regains focus
   useFocusEffect(useCallback(() => { if (user?.id) refetch(); }, [user?.id]));
+  // Small delayed refetch to catch recent markRead() commits after navigating back
+  useEffect(() => {
+    if (isFocused && user?.id) {
+      const t = setTimeout(() => { refetch(); }, 350);
+      return () => clearTimeout(t);
+    }
+  }, [isFocused, user?.id]);
 
   const onScroll = useAnimatedScrollHandler({ onScroll: () => {} });
 
@@ -231,8 +238,8 @@ export default function ChatList() {
     const skeletons = [0,1,2,3];
     return (
       <Screen style={{ padding:0 }} edges={[]}>        
-        <GradientScaffold>
-          <View style={{ flex:1, paddingTop:16, paddingHorizontal:16 }}>
+        <CenterScaffold variant='auth'>
+          <View style={{ flex:1, paddingTop:16 }}>
             {skeletons.map(i => (
               <View key={i} style={{ flexDirection:'row', alignItems:'center', gap: theme.spacing(1), backgroundColor: theme.colors.card, borderRadius: theme.radius, padding:12, borderWidth:1, borderColor: theme.colors.border, marginBottom: theme.spacing(1) }}>
                 <View style={{ width:44, height:44, borderRadius:22, backgroundColor: theme.colors.border }} />
@@ -243,14 +250,14 @@ export default function ChatList() {
               </View>
             ))}
           </View>
-        </GradientScaffold>
+        </CenterScaffold>
       </Screen>
     );
   }
 
   return (
   <Screen style={{ padding:0 }} edges={[]}>
-      <GradientScaffold>
+      <CenterScaffold variant='auth'>
         <AnimatedFlatList
           onScroll={onScroll}
           scrollEventThrottle={16}
@@ -258,7 +265,8 @@ export default function ChatList() {
           refreshing={manualRefreshing}
           onRefresh={handleRefresh}
           keyExtractor={(m:any) => String(m.id)}
-          contentContainerStyle={{ paddingTop:16, paddingBottom:48, paddingHorizontal:16, gap: theme.spacing(1) }}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingTop:16, paddingBottom:48, gap: theme.spacing(1) }}
           ItemSeparatorComponent={() => <View style={{ height: theme.spacing(1) }} />}
           renderItem={({ item }: any) => {
             const rel = formatRelative(item.lastAt);
@@ -334,7 +342,7 @@ export default function ChatList() {
           }}
           ListEmptyComponent={<Card><Text style={{ color: theme.colors.text }}>{T.empty}</Text></Card>}
         />
-      </GradientScaffold>
+      </CenterScaffold>
     </Screen>
   );
 }

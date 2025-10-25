@@ -6,6 +6,11 @@ export interface FullProfile extends Profile {
   show_orientation?: boolean;
   show_gender?: boolean;
   show_seeking?: boolean;
+  // Notifications
+  push_opt_in?: boolean;
+  notify_messages?: boolean;
+  notify_likes?: boolean;
+  notify_friend_requests?: boolean;
   photos?: { id: number|string; url: string; sort_order?: number; main?: boolean }[];
   avatar_url?: string | null;
   photos_count?: number;

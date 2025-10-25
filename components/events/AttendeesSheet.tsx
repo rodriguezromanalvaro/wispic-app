@@ -26,7 +26,7 @@ export const AttendeesSheet: React.FC = () => {
         .from('event_attendance')
         .select('user_id')
         .eq('event_id', eventId)
-        .eq('status','going')
+  .eq('status','going')
         .limit(80);
       if (attErr) throw attErr;
       const ids = Array.from(new Set((attendanceRows || []).map(r => r.user_id)));
@@ -79,7 +79,7 @@ export const AttendeesSheet: React.FC = () => {
         ) : error ? (
           <Text style={{ color: theme.colors.danger }}>Error al cargar asistentes</Text>
         ) : attendees.length === 0 ? (
-          <Text style={{ color: theme.colors.textDim }}>Aún no hay asistentes apuntados.</Text>
+          <Text style={{ color: theme.colors.textDim }}>Aún no hay asistentes.</Text>
         ) : (
           <FlatList
             data={attendees}

@@ -20,6 +20,7 @@ export interface LocalCardProps {
   city?: string;
   venueType?: string; // para badge de tipo
   nextDateISO: string;
+  distanceKm?: number;
   weekDaysLabel?: string;
   sponsored?: boolean;
   expanded: boolean;
@@ -34,6 +35,7 @@ export interface LocalCardProps {
   onOpenOccurrence(eventId: number): void;
   onOpenAttendees(eventId: number): void;
   onSeeAllOccurrences(seriesId: number): void;
+  priceLabel?: string; // opcional, si hay precio coherente para la próxima
 }
 
 const DayBar = ({ label }: { label?: string }) => {
@@ -78,9 +80,10 @@ const DayBar = ({ label }: { label?: string }) => {
 
 export const LocalCard = memo(function LocalCard(props: LocalCardProps) {
   const {
-  seriesId, title, venueName, city, venueType, nextDateISO, weekDaysLabel,
+  seriesId, title, venueName, city, venueType, nextDateISO, distanceKm, weekDaysLabel,
     sponsored, expanded, occurrences, hasMoreOccurrences, attendeesCount, attendeeAvatars,
-    going, togglingIds, onToggleExpand, onToggleGoing, onOpenOccurrence, onOpenAttendees, onSeeAllOccurrences
+    going, togglingIds, onToggleExpand, onToggleGoing, onOpenOccurrence, onOpenAttendees, onSeeAllOccurrences,
+    priceLabel
   } = props;
 
   const nextDate = new Date(nextDateISO);
@@ -130,14 +133,26 @@ export const LocalCard = memo(function LocalCard(props: LocalCardProps) {
       </View>
       {/* Summary block clickable to expand */}
       <Pressable onPress={onToggleExpand} style={{ paddingRight:8 }}>
-        <Text style={{ color: theme.colors.textDim, fontSize:13 }}>
-          Próxima: {nextLabel}
-        </Text>
+        <View style={{ flexDirection:'row', alignItems:'center', gap:8 }}>
+          <Text style={{ color: theme.colors.textDim, fontSize:13 }}>
+            Próxima: {nextLabel}
+          </Text>
+          {priceLabel ? (
+            <View style={{ paddingHorizontal:8, paddingVertical:2, borderRadius:999, backgroundColor: theme.colors.card, borderWidth:1, borderColor: theme.colors.border }}>
+              <Text style={{ color: theme.colors.text, fontSize:11, fontWeight:'700' }}>{priceLabel}</Text>
+            </View>
+          ) : null}
+        </View>
         {/* Se elimina el contador de próximas para dar protagonismo a la barra de días abiertos */}
         {weekDaysLabel && <DayBar label={weekDaysLabel} />}
         <Text style={{ color: theme.colors.textDim, marginTop:4 }}>
           {venueName || ''}{venueName ? ' · ' : ''}{city || ''}
         </Text>
+        {typeof distanceKm === 'number' && (
+          <Text style={{ color: theme.colors.textDim, marginTop:2, fontSize:12 }}>
+            Distancia: {distanceKm < 10 ? distanceKm.toFixed(1) : Math.round(distanceKm)} km
+          </Text>
+        )}
         {venueType && venueType !== 'all' && (
           <View style={[venueTypeBadgeStyle(venueType), { marginTop:4 }]}>
             <Text style={venueTypeBadgeTextStyle(venueType)}>{venueTypeLabel(venueType)}</Text>

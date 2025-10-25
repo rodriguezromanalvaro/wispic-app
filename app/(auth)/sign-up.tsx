@@ -4,7 +4,6 @@ import { Link, useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { Screen, Card, H1, P, TextInput, Button } from '../../components/ui';
 import { theme } from '../../lib/theme';
-import { LinearGradient } from 'expo-linear-gradient';
 import { CenterScaffold } from '../../components/Scaffold';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';

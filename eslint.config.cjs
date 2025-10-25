@@ -4,6 +4,7 @@ const tsParser = require('@typescript-eslint/parser');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const reactPlugin = require('eslint-plugin-react');
 const reactHooks = require('eslint-plugin-react-hooks');
+const unusedImports = require('eslint-plugin-unused-imports');
 
 module.exports = [
   // Ignora SOLO lo que no queremos lintar
@@ -48,6 +49,7 @@ module.exports = [
       '@typescript-eslint': tsPlugin,
       react: reactPlugin,
       'react-hooks': reactHooks,
+      'unused-imports': unusedImports,
     },
     settings: {
       react: { version: 'detect' },
@@ -59,12 +61,14 @@ module.exports = [
       // React 17+: no hace falta importar React en cada archivo
       'react/react-in-jsx-scope': 'off',
 
-      // Hooks
-      'react-hooks/rules-of-hooks': 'error',
-      'react-hooks/exhaustive-deps': 'warn',
+  // Hooks: mantener reglas de hooks, pero desactivar deps por ruido hasta refactor
+  'react-hooks/rules-of-hooks': 'error',
+  'react-hooks/exhaustive-deps': 'off',
 
-      // Unused vars: permite _prefijo para “intencionadamente no usado”
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      // Unused imports: elimina imports sin uso automáticamente; ignoramos vars no usadas (demasiado ruidoso ahora)
+      'unused-imports/no-unused-imports': 'error',
+      'unused-imports/no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
     },
   },
 ];

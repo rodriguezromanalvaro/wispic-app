@@ -38,6 +38,7 @@ import { EditOrientationSheet } from '../sheets/EditOrientationSheet';
 import { EditSeekingSheet } from '../sheets/EditSeekingSheet';
 import { EditGenderSheet } from '../sheets/EditGenderSheet';
 // TopBar eliminado: usamos sólo el header global de tabs
+import CityPickerSheet from '../../../components/location/CityPickerSheet';
 
 export default function ProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
@@ -54,6 +55,7 @@ export default function ProfileScreen() {
   const [showSeeking, setShowSeeking] = useState(false);
   const [showGender, setShowGender] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<any | null>(null);
+  const [showCityPicker, setShowCityPicker] = useState(false);
   // Photo editing no longer needs toggle
   // legacy fade removed (could be reintroduced with Reanimated if needed)
   // Scroll animations para TopBar eliminadas; se podrían reintroducir si se añade un header interno de nuevo
@@ -236,7 +238,7 @@ export default function ProfileScreen() {
                     <LocationSection
                       city={(data as any).city}
                       permissionGranted={true /* best-effort UI: value shows regardless */}
-                      onEdit={undefined}
+                      onEdit={isOwner ? () => setShowCityPicker(true) : undefined}
                     />
                   </CardSoft>
                 </Appear>
@@ -280,6 +282,21 @@ export default function ProfileScreen() {
       </GradientScaffold>
       {isOwner && data && (
         <>
+          <CityPickerSheet
+            visible={showCityPicker}
+            onClose={() => setShowCityPicker(false)}
+            onSelect={(c) => {
+              if ((c as any).id === 'all') { setShowCityPicker(false); return; }
+              const name = (c as any).name as string;
+              if (name && name.trim().length) {
+                mutations.updateBasics.mutate({ city: name });
+              }
+              setShowCityPicker(false);
+            }}
+            showAllOption={false}
+            enableUseCurrent
+            forProfile
+          />
           <EditBasicsSheet
             visible={showBasics}
             onClose={() => setShowBasics(false)}

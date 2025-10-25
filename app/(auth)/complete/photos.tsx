@@ -15,7 +15,7 @@ import { supabase } from '../../../lib/supabase';
 import { uploadUserPhotos, DEFAULT_PUBLIC_BUCKET, processPendingUploads } from '../../../lib/storage';
 // Usamos la API legacy para evitar el warning deprecado mientras migramos a la nueva File API
 import * as FileSystem from 'expo-file-system/legacy';
-import { decode as decodeBase64 } from 'base64-arraybuffer'; // (Puede eliminarse cuando migremos todo al helper)
+// (Puede eliminarse cuando migremos todo al helper)
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 
@@ -69,7 +69,7 @@ export default function StepPhotos() {
         }
       } catch {}
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [user?.id]);
 
   // Persist photos to draft.temp_photos so they survive navigation (including empty arrays)

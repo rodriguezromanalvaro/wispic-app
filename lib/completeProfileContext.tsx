@@ -137,7 +137,7 @@ export function CompleteProfileProvider({ children }: { children: React.ReactNod
 
   useEffect(() => {
     loadFromSupabase();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [user?.id]);
 
   const saveToSupabase = async (): Promise<boolean> => {

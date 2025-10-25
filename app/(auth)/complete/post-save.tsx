@@ -5,11 +5,34 @@ import { Screen, Card, H1, P, Button } from '../../../components/ui';
 import { theme } from '../../../lib/theme';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '../../../lib/useAuth';
+import { supabase } from '../../../lib/supabase';
+import { nearestCities, CityRow } from '../../../lib/location/geo';
 
 export default function StepPostSave() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t } = useTranslation();
+  const { user } = useAuth();
+
+  async function maybeCaptureLocationOnce() {
+    try {
+      if (!user) return;
+      const ExpoLocation = await import('expo-location');
+      const perm = await ExpoLocation.getForegroundPermissionsAsync();
+      if (perm.status !== 'granted') return;
+      const pos = await ExpoLocation.getCurrentPositionAsync({ accuracy: ExpoLocation.Accuracy.Balanced });
+      // Fetch cities with lat/lng (fallback safe)
+      const { data, error } = await supabase.from('cities').select('id,name,lat,lng').order('name');
+      if (error || !data || !data.length) return;
+      const list = (data as CityRow[]);
+      const nearest = nearestCities(list, { lat: pos.coords.latitude, lng: pos.coords.longitude }, 1)[0];
+      if (!nearest) return;
+      await supabase.from('profiles').update({ city: nearest.name }).eq('id', user.id);
+    } catch {
+      // ignore
+    }
+  }
 
   return (
     <Screen style={{ padding: 0, gap: 0 }}>
@@ -20,7 +43,7 @@ export default function StepPostSave() {
             <P style={styles.subtitle}>{t('postsave.subtitle','Puedes ir a la app o seguir personalizando con texto y preguntas opcionales.')}</P>
             <Card style={styles.card}>
               <View style={{ flexDirection:'row', gap:8 }}>
-                <Button title={t('postsave.goApp','Ir a la app')} onPress={() => router.replace('/(tabs)' as any)} />
+                <Button title={t('postsave.goApp','Ir a la app')} onPress={async () => { await maybeCaptureLocationOnce(); router.replace('/(tabs)' as any); }} />
                 <Button title={t('postsave.keepImproving','Seguir con el perfil')} variant="ghost" onPress={() => router.replace('(auth)/complete/bio' as any)} />
               </View>
             </Card>

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
-import { Screen, H1, P, TextInput, Button, SelectionTile, StickyFooterActions, UploadOverlayModal } from '../../components/ui';
+import { Screen, H1, P, TextInput, SelectionTile, StickyFooterActions, UploadOverlayModal } from '../../components/ui';
 import { OwnerBackground } from '../../components/OwnerBackground';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CenterScaffold } from '../../components/Scaffold';

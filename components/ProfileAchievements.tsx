@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Modal, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, FlatList } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
 import { Card, Button } from './ui';

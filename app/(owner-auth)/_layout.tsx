@@ -7,5 +7,5 @@ export default function OwnerAuthLayout() {
     applyPalette('owner');
     return () => { applyPalette('coral'); };
   }, []);
-  return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.colors.bg } }} />;
+  return <Stack screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: theme.colors.bg } }} />;
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { P, H1, Button } from './ui';
+import { P, H1 } from './ui';
 import { getGenderLabel, toOrientationLabels } from '../lib/profileMappings';
 import { ProfileDraft } from '../lib/completeProfileContext';
 import { useTranslation } from 'react-i18next';

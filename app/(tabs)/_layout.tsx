@@ -2,11 +2,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Tabs, usePathname, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { View, Text, Image, Pressable } from 'react-native';
+import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlendHeaderBackground } from '../../components/design/BlendHeaderBackground';
 import { useQuery } from '@tanstack/react-query';
 import { useFocusEffect } from '@react-navigation/native';
 
-import { theme } from '../../lib/theme';
 import { useThemeMode } from '../../lib/theme-context';
 import { useAuth } from '../../lib/useAuth';
 import { supabase } from '../../lib/supabase';
@@ -221,7 +222,12 @@ export default function TabLayout() {
         headerTitle: headerTitleComponent,
         headerLeft: headerLeftComponent,
         headerRight: headerRightComponent,
-        headerStyle: { backgroundColor: dynTheme.colors.bgAlt },
+  headerTransparent: false,
+  // Blend header with screen background
+  headerStyle: { backgroundColor: dynTheme.colors.bg },
+        headerBackground: () => (
+          <BlendHeaderBackground variant={headerVariant as any} />
+        ),
         headerShadowVisible: false,
   headerTitleAlign: 'left',
         tabBarActiveTintColor: dynTheme.colors.primary,

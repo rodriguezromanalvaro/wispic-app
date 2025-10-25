@@ -1,6 +1,5 @@
 import React, { createContext, useCallback, useContext, useState } from 'react';
 import { View, Text, Animated, Easing } from 'react-native';
-import { theme } from './theme';
 
 type ToastType = 'success' | 'error' | 'info';
 interface Toast { id: number; message: string; type: ToastType; }

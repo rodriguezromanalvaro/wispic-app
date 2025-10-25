@@ -54,6 +54,8 @@ export default function OwnerLayout() {
         title: 'Ajustes',
         tabBarIcon: ({ color, size }) => <Ionicons name="settings-outline" color={color} size={size} />,
       }} />
+      {/* Hide series list from the tab bar; detail is handled inside its own Stack layout */}
+      <Tabs.Screen name="series" options={{ href: null }} />
     </Tabs>
   );
 }

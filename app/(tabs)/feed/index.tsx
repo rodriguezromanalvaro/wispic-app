@@ -1,14 +1,15 @@
-import { ActivityIndicator, FlatList, SectionList, View, Text, Pressable, ScrollView } from 'react-native';
+import { FlatList, SectionList, View, Text, Pressable } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../lib/useAuth';
 import { Screen, Card, Button } from '../../../components/ui';
-import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
-import { GradientScaffold } from '../../../features/profile/components/GradientScaffold';
+import Animated, { useAnimatedScrollHandler } from 'react-native-reanimated';
+// (using existing View import from react-native)
 import { theme } from '../../../lib/theme';
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { loadJSON, saveJSON } from '../../../lib/storage';
+import { CenterScaffold } from '../../../components/Scaffold';
 
 type EventRow = { id: number; title: string; city: string | null; start_at: string };
 type FeedItem = EventRow & { pending: number };
@@ -282,8 +283,8 @@ export default function FeedIndex() {
     const skeletons = Array.from({ length: 4 });
     return (
   <Screen style={{ padding:0 }} edges={[]}>
-        <GradientScaffold>
-          <View style={{ flex:1, paddingTop:16, paddingHorizontal:16 }}>
+    <CenterScaffold variant='auth'>
+          <View style={{ flex:1, paddingTop:16 }}>
             {skeletons.map((_,i) => (
               <View key={i} style={{ marginBottom:14, backgroundColor: theme.colors.card, borderRadius: theme.radius, padding:16, overflow:'hidden' }}>
                 <View style={{ height:14, width:'60%', backgroundColor: theme.colors.border, borderRadius:8, marginBottom:12 }} />
@@ -292,14 +293,14 @@ export default function FeedIndex() {
               </View>
             ))}
           </View>
-        </GradientScaffold>
+    </CenterScaffold>
       </Screen>
     );
   }
 
   return (
   <Screen style={{ padding:0 }} edges={[]}>
-      <GradientScaffold>
+    <CenterScaffold variant='auth'>
         <AnimatedSectionList
           onScroll={onScroll}
           scrollEventThrottle={16}
@@ -307,7 +308,8 @@ export default function FeedIndex() {
           keyExtractor={(item:FeedItem) => String(item.id)}
           refreshing={refreshing}
           onRefresh={onRefresh}
-          contentContainerStyle={{ paddingTop:16, paddingBottom:48, paddingHorizontal:16 }}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingTop:16, paddingBottom:48 }}
           SectionSeparatorComponent={() => <View style={{ height: theme.spacing(2) }} />}
           ItemSeparatorComponent={() => <View style={{ height: theme.spacing(1.5) }} />}
           ListHeaderComponent={( 
@@ -410,7 +412,7 @@ export default function FeedIndex() {
             );
           })()}
         />
-      </GradientScaffold>
+    </CenterScaffold>
     </Screen>
   );
 }

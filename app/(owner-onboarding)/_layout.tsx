@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
-import { applyPalette, theme } from '../../lib/theme';
+import { applyPalette } from '../../lib/theme';
 import { useEffect } from 'react';
 
 export default function OwnerOnboardingStack() {
@@ -8,7 +8,7 @@ export default function OwnerOnboardingStack() {
     return () => { applyPalette('coral'); };
   }, []);
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: 'transparent' } }}>
+    <Stack screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }}>
       <Stack.Screen name="basic" />
       <Stack.Screen name="details" />
       <Stack.Screen name="media" />

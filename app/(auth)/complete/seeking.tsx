@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CenterScaffold } from '../../../components/Scaffold';
-import { Screen, Card, H1, P, Button, Switch, SelectionTile, StickyFooterActions } from '../../../components/ui';
+import { Screen, Card, H1, P, Switch, SelectionTile, StickyFooterActions } from '../../../components/ui';
 import { theme } from '../../../lib/theme';
 import { useCompleteProfile } from '../../../lib/completeProfileContext';
 import { useLocalSearchParams, useRouter } from 'expo-router';

@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { View, ScrollView, Pressable, Image, StyleSheet, Dimensions, TouchableOpacity, Modal, InteractionManager } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Screen, H1, P, Button } from '../../components/ui';
+import { Screen, H1, P } from '../../components/ui';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../../lib/theme';
 import { Ionicons } from '@expo/vector-icons';

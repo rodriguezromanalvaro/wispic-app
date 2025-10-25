@@ -1,7 +1,7 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, ScrollView, Pressable, StyleSheet, Modal, BackHandler } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Screen, H1, P, Button, SelectionTile } from '../../components/ui';
+import { Screen, H1, P, SelectionTile, Button, Card, Switch } from '../../components/ui';
 import { getGenderLabel, getGenderOptions, getOrientationOptions, toOrientationLabels, getSeekingOptions } from '../../lib/profileMappings';
 import { theme } from '../../lib/theme';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,8 @@ import { useTranslation } from 'react-i18next';
 import { useProfile } from '../../features/profile/hooks/useProfile';
 import { useProfileMutations } from '../../features/profile/hooks/useProfileMutations';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { registerPushTokenForUser, clearPushToken } from '../../lib/push';
+import CityPickerSheet from '../../components/location/CityPickerSheet';
 
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
@@ -42,6 +44,8 @@ export default function ConfigureProfileList() {
   const insets = useSafeAreaInsets();
   const { data } = useProfile();
   const mutations = useProfileMutations(data?.id);
+  const [showCityPicker, setShowCityPicker] = useState(false);
+  const [pendingPush, setPendingPush] = useState(false);
 
   const [sheet, setSheet] = useState<null | { type: 'gender' } | { type: 'orientation' } | { type: 'seeking' }>(null);
   // Local t wrapper to satisfy our helper signature
@@ -85,7 +89,12 @@ export default function ConfigureProfileList() {
         {/* Sección Sobre ti */}
         <SectionHeader title={t('profile.sections.aboutYou','Sobre ti')} />
         <View style={styles.cardList}>
-          <Row icon={<Ionicons name="location-outline" size={20} color={theme.colors.text} />} label={t('profile.location','Ubicación')} value={(data?.city ?? 'Sin ubicación') || 'Sin ubicación'} disabled />
+          <Row
+            icon={<Ionicons name="location-outline" size={20} color={theme.colors.text} />}
+            label={t('profile.location','Ubicación')}
+            value={(data?.city ?? 'Sin ubicación') || 'Sin ubicación'}
+            onPress={() => router.push('/profile/location' as any)}
+          />
           <Row icon={<Ionicons name="images-outline" size={20} color={theme.colors.text} />} label={t('profile.photos','Fotos')} value={t('profile.manage','Gestionar')} onPress={() => router.push('/profile/photos' as any)} />
           <Row icon={<Ionicons name="calendar-outline" size={20} color={theme.colors.text} />} label={t('profile.age','Edad')} value={typeof data?.age==='number' ? String(data.age) : undefined} disabled />
           <Row icon={<Ionicons name="male-female-outline" size={20} color={theme.colors.text} />} label={t('profile.gender','Género')} value={genderValue || undefined} onPress={() => setSheet({ type: 'gender' })} />
@@ -97,7 +106,83 @@ export default function ConfigureProfileList() {
           <Row icon={<Ionicons name="person-outline" size={20} color={theme.colors.text} />} label={t('complete.orientationTitle','¿A quién estás buscando?')} value={orientationValue || undefined} onPress={() => setSheet({ type: 'orientation' })} />
         </View>
 
+        {/* Sección Notificaciones */}
+        <SectionHeader title={t('profile.notifications','Notificaciones')}
+          subtitle={t('profile.notificationsSubtitle','Activa o desactiva las notificaciones push y elige qué recibir') as any}
+        />
+        <Card style={{ paddingVertical: 8, marginHorizontal: 0, borderTopWidth: 1, borderBottomWidth: 1, borderColor: theme.colors.border }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8 }}>
+            <View>
+              <P bold style={{ color: theme.colors.text }}>Notificaciones push</P>
+              <P dim>{data?.push_opt_in ? 'Activadas' : 'Desactivadas'}</P>
+            </View>
+            {data?.push_opt_in ? (
+              <Button
+                title={pendingPush ? 'Desactivando…' : 'Desactivar'}
+                onPress={async () => {
+                  if (!data?.id) return;
+                  try {
+                    setPendingPush(true);
+                    await clearPushToken(data.id);
+                    await mutations.updateNotifications.mutateAsync({ push_opt_in: false });
+                  } finally {
+                    setPendingPush(false);
+                  }
+                }}
+                variant="outline"
+                disabled={pendingPush}
+              />
+            ) : (
+              <Button
+                title={pendingPush ? 'Activando…' : 'Activar'}
+                onPress={async () => {
+                  if (!data?.id) return;
+                  try {
+                    setPendingPush(true);
+                    await registerPushTokenForUser(data.id);
+                    await mutations.updateNotifications.mutateAsync({ push_opt_in: true, notify_messages: true, notify_likes: true, notify_friend_requests: true });
+                  } finally {
+                    setPendingPush(false);
+                  }
+                }}
+                disabled={pendingPush}
+              />
+            )}
+          </View>
+
+          {/* Toggles por categoría */}
+          <View style={{ borderTopWidth: 1, borderColor: theme.colors.border, marginTop: 8 }} />
+          <View style={{ paddingHorizontal: 12, paddingVertical: 4, gap: 12, opacity: data?.push_opt_in ? 1 : 0.6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <P style={{ color: theme.colors.text }}>Mensajes</P>
+              <Switch
+                value={!!data?.notify_messages}
+                onValueChange={(v) => mutations.updateNotifications.mutate({ notify_messages: v })}
+                disabled={!data?.push_opt_in}
+              />
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <P style={{ color: theme.colors.text }}>Likes</P>
+              <Switch
+                value={!!data?.notify_likes}
+                onValueChange={(v) => mutations.updateNotifications.mutate({ notify_likes: v })}
+                disabled={!data?.push_opt_in}
+              />
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <P style={{ color: theme.colors.text }}>Solicitudes de amistad</P>
+              <Switch
+                value={!!data?.notify_friend_requests}
+                onValueChange={(v) => mutations.updateNotifications.mutate({ notify_friend_requests: v })}
+                disabled={!data?.push_opt_in}
+              />
+            </View>
+          </View>
+        </Card>
+
       </ScrollView>
+
+      {/* City picker sheet was replaced by a full-screen selector at /profile/location */}
 
       {/* Bottom sheets sencillas para género/orientación/busco */}
       <Modal visible={!!sheet} transparent animationType="fade" onRequestClose={() => setSheet(null)}>

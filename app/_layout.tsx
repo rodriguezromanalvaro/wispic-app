@@ -9,10 +9,13 @@ import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useEffect } from 'react';
+import Constants from 'expo-constants';
 import { registerPushTokenForUser } from '../lib/push';
 import PaywallModal from '../components/PaywallModal';
 import '../lib/i18n';
 import { ToastProvider } from '../lib/toast';
+import { TamaguiProvider } from '@tamagui/core';
+import tamaguiConfig from '../tamagui.config';
 
 const queryClient = new QueryClient();
 
@@ -57,15 +60,25 @@ export default function RootLayout() {
       } catch {}
     })();
   }, []);
+
+  // Debug: log if Google Places key is detected (boolean only, no key value)
+  useEffect(() => {
+    try {
+      const hasPlacesKey = !!(Constants.expoConfig as any)?.extra?.placesApiKey;
+      console.log(`[places] key detected: ${hasPlacesKey}`);
+    } catch {}
+  }, []);
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <ThemeProvider initialMode={theme.mode}>
           <WithPushRegistration>
             <GestureHandlerRootView style={{ flex: 1 }}>
-              <ToastProvider>
-                <InnerApp />
-              </ToastProvider>
+              <TamaguiProvider config={tamaguiConfig} defaultTheme={theme.mode}>
+                <ToastProvider>
+                  <InnerApp />
+                </ToastProvider>
+              </TamaguiProvider>
             </GestureHandlerRootView>
           </WithPushRegistration>
         </ThemeProvider>

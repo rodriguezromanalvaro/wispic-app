@@ -84,9 +84,9 @@ const lightColorsMagenta = {
 
 export const theme = {
   mode: 'light' as 'light' | 'dark',
-  colors: lightColorsCoral,
+  colors: lightColorsMagenta,
   darkColors,
-  lightColors: lightColorsCoral,
+  lightColors: lightColorsMagenta,
   // Radio principal según guía (16px en cards/botones grandes)
   radius: 16,
   radii: { xs:6, sm:10, md:14, lg:20, pill: 999 },
@@ -108,15 +108,15 @@ export const theme = {
     }
   },
   gradients: {
-    // Acento Coral/Peach
-    brand: ['#FFA07A', '#FF6B6B'],
-    brandSoft: ['rgba(255,107,107,0.16)', 'rgba(255,107,107,0.06)'],
+    // Acento Magenta/Fucsia
+    brand: ['#FF4D8D', '#A855F7'],
+    brandSoft: ['rgba(225,29,72,0.16)', 'rgba(168,85,247,0.08)'],
     positive: ['#10B981', '#34D399'],
     dark: ['#0B1220', '#111827'],
     // Fondo general con leve matiz cálido para pantallas (feed, chat, etc.)
-    appBg: ['#FFF8F5', '#FFFFFF', '#FFF5F7'],
-    glowTop: ['rgba(255,107,107,0.16)', 'rgba(255,107,107,0)'],
-    glowBottom: ['rgba(255,107,107,0)', 'rgba(255,107,107,0.14)']
+    appBg: ['#FFF5F7', '#FFFFFF', '#FFF5F7'],
+    glowTop: ['rgba(225,29,72,0.16)', 'rgba(225,29,72,0)'],
+    glowBottom: ['rgba(225,29,72,0)', 'rgba(168,85,247,0.14)']
   },
   layout: {
     maxWidth: 480,

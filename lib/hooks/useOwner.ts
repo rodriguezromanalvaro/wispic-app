@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
-import * as SecureStore from 'expo-secure-store';
+import { useEffect, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { useAuth } from '../useAuth';
 import { supabase } from '../supabase';

@@ -16,7 +16,7 @@ function generateId() {
 // Compresión/resize: dependerá de expo-image-manipulator (si no está, hacemos fallback)
 let ImageManipulator: any = null;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   ImageManipulator = require('expo-image-manipulator');
 } catch {}
 import * as FileSystem from 'expo-file-system/legacy';

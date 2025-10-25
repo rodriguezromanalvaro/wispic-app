@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Animated, Easing, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Dimensions, BackHandler } from 'react-native';
+import { View, Text, Animated, Easing, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, BackHandler } from 'react-native';
 import { Screen, H1, P, Button, Card } from '../../components/ui';
 import { CenterScaffold } from '../../components/Scaffold';
 import { router } from 'expo-router';
@@ -7,7 +7,6 @@ import { theme } from '../../lib/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import * as WebBrowser from 'expo-web-browser';
-import * as AuthSession from 'expo-auth-session';
 import { LinearGradient } from 'expo-linear-gradient';
 import { OwnerBackground, OWNER_BLUE_GRADIENT, OWNER_BLUE_SOFT, OWNER_GLOW_TOP, OWNER_GLOW_BOTTOM, OWNER_BLUE_VEIL } from '../../components/OwnerBackground';
 

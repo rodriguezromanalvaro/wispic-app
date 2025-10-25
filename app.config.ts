@@ -98,6 +98,8 @@ const config: ExpoConfig = {
     eas: {
       projectId: 'f6d316e7-9b6c-437e-b86b-0ce379b25a0d',
     },
+    // Google Places API Key for city search (enable Places API in Google Cloud)
+    placesApiKey: process.env.GOOGLE_PLACES_API_KEY,
   },
   updates: {
     enabled: true,

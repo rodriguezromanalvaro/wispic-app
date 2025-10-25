@@ -12,6 +12,8 @@ export interface EventCardProps {
   venueName?: string;
   city?: string;
   venueType?: string; // para badge de tipo
+  priceLabel?: string; // 'Gratis' | '12,00 €'
+  distanceKm?: number;
   attendeesCount: number;
   attendeeAvatars: Array<{ id: string; avatar_url: string | null }>;
   going: boolean;
@@ -23,7 +25,7 @@ export interface EventCardProps {
 }
 
 export const EventCard = memo(function EventCard(props: EventCardProps) {
-  const { id, title, startISO, venueName, city, venueType, attendeesCount, attendeeAvatars, going, sponsored, toggling, onToggleGoing, onOpen, onOpenAttendees } = props;
+  const { id, title, startISO, venueName, city, venueType, priceLabel, distanceKm, attendeesCount, attendeeAvatars, going, sponsored, toggling, onToggleGoing, onOpen, onOpenAttendees } = props;
   const dt = new Date(startISO);
   const dateLabel = dt.toLocaleDateString('es', { weekday:'short', day:'numeric', month:'short' });
   const time = dt.toLocaleTimeString('es', { hour:'2-digit', minute:'2-digit' });
@@ -35,12 +37,24 @@ export const EventCard = memo(function EventCard(props: EventCardProps) {
       <View style={{ flexDirection:'row', alignItems:'flex-start', marginBottom:6 }}>
         <Pressable onPress={() => onOpen(id)} style={{ flex:1, paddingRight:8 }}>
           <Text style={{ color: theme.colors.text, fontSize:22, lineHeight:27, fontWeight:'800' }} numberOfLines={2}>{title}</Text>
-          <Text style={{ color: theme.colors.textDim, marginTop:4, fontSize:14 }}>
-            {dateLabel} · {time}
-          </Text>
+          <View style={{ flexDirection:'row', alignItems:'center', gap:8, marginTop:4 }}>
+            <Text style={{ color: theme.colors.textDim, fontSize:14 }}>
+              {dateLabel} · {time}
+            </Text>
+            {priceLabel ? (
+              <View style={{ paddingHorizontal:8, paddingVertical:2, borderRadius:999, backgroundColor: theme.colors.card, borderWidth:1, borderColor: theme.colors.border }}>
+                <Text style={{ color: theme.colors.text, fontSize:11, fontWeight:'700' }}>{priceLabel}</Text>
+              </View>
+            ) : null}
+          </View>
           <Text style={{ color: theme.colors.textDim, marginTop:2, fontSize:12 }}>
             {venueName || ''}{venueName ? ' · ' : ''}{city || ''}
           </Text>
+          {typeof distanceKm === 'number' && (
+            <Text style={{ color: theme.colors.textDim, marginTop:2, fontSize:12 }}>
+              Distancia: {distanceKm < 10 ? distanceKm.toFixed(1) : Math.round(distanceKm)} km
+            </Text>
+          )}
           {venueType && venueType !== 'all' && (
             <View style={[venueTypeBadgeStyle(venueType), { marginTop:4 }]}> 
               <Text style={venueTypeBadgeTextStyle(venueType)}>{venueTypeLabel(venueType)}</Text>

@@ -1,5 +1,5 @@
 // components/ProfilePhotos.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -14,9 +14,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Button } from './ui';
 import { theme } from '../lib/theme';
-import { MIN_PHOTOS } from '../lib/types';
 import { decode } from 'base64-arraybuffer';
 import { generateSimpleId } from '../lib/utils';
 

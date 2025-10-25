@@ -181,12 +181,13 @@ export const P: React.FC<{ children: any; style?: any; bold?: boolean; dim?: boo
   ]}>{children}</Text>
 );
 
-export const Switch: React.FC<{ value: boolean; onValueChange: (v: boolean) => void; style?: any }> = ({ value, onValueChange, style }) => (
+export const Switch: React.FC<{ value: boolean; onValueChange: (v: boolean) => void; style?: any; disabled?: boolean }> = ({ value, onValueChange, style, disabled }) => (
   <RNSwitch
     value={value}
     onValueChange={onValueChange}
     trackColor={{ false: '#475569', true: theme.colors.primary }}
     thumbColor={value ? '#fff' : '#cbd5e1'}
+    disabled={disabled}
     style={style}
   />
 );

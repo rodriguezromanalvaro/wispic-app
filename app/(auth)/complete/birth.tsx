@@ -1,9 +1,9 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, View, Alert, TextInput as RNTextInput } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, View, ScrollView, TextInput as RNTextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CenterScaffold } from '../../../components/Scaffold';
 import { OnboardingHeader } from '../../../components/OnboardingHeader';
-import { Screen, Card, H1, P, TextInput, Button, StickyFooterActions } from '../../../components/ui';
+import { Screen, Card, H1, P, StickyFooterActions } from '../../../components/ui';
 import { theme } from '../../../lib/theme';
 import { useCompleteProfile } from '../../../lib/completeProfileContext';
 import { useRouter } from 'expo-router';
@@ -76,12 +76,21 @@ export default function StepBirth() {
     ? t('complete.birthTitleAskName', '{{name}}, ¿Cuál es tu fecha de nacimiento?', { name: displayName })
     : t('complete.birthTitle');
 
+  // Extra padding so last elements don't hide behind sticky footer
+  const bottomPad = Math.max(insets.bottom, 16) + 140;
+
   return (
     <Screen style={{ padding: 0, gap: 0 }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <CenterScaffold variant='auth' paddedTop={Math.max(insets.top, 60)}>
           <OnboardingHeader step={3} total={10} />
-          <View style={[styles.center, { paddingBottom: 24 }]}>            
+          <ScrollView
+            style={{ flex: 1, alignSelf: 'stretch' }}
+            contentContainerStyle={[styles.scrollContent, { paddingTop: 16, paddingBottom: bottomPad }]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'on-drag' : 'interactive'}
+            showsVerticalScrollIndicator={false}
+          >            
             <H1 style={styles.title}>{titleText}</H1>
             <P style={styles.subtitle}>{t('complete.birthSubtitle')}</P>
             <Card style={styles.card}>
@@ -147,7 +156,7 @@ export default function StepBirth() {
                 <P style={{ color: '#F97066', fontSize: 12, marginTop: 4 }}>{validation.reason}</P>
               )}
             </Card>
-          </View>
+          </ScrollView>
           <StickyFooterActions
             actions={[
               { title: t('common.continue'), onPress: () => { if (validation.ok) { setDraft((d) => ({ ...d, birthdate: birthdate.trim() })); router.push('(auth)/complete/gender' as any); } }, disabled: !validation.ok },
@@ -163,6 +172,7 @@ export default function StepBirth() {
 const styles = StyleSheet.create({
   gradient: { flex: 1, paddingHorizontal: 20, paddingTop: 60, paddingBottom: 24 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
+  scrollContent: { alignItems: 'center', gap: 16, paddingHorizontal: 0 },
   title: { color: theme.colors.text, fontSize: 30, fontWeight: '800', textAlign: 'center' },
   subtitle: { color: theme.colors.subtext, fontSize: 16, textAlign: 'center', marginHorizontal: 12, marginBottom: 8 },
   card: { width: '100%', maxWidth: 420, padding: theme.spacing(2), borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },

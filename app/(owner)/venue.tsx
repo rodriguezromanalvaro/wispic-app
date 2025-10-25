@@ -1,4 +1,4 @@
-import { View, Text } from 'react-native';
+import { Text } from 'react-native';
 import { theme } from '../../lib/theme';
 import { Screen } from '../../components/ui';
 

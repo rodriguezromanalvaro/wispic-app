@@ -7,6 +7,7 @@ import { useToast } from '../../../lib/toast';
 
 interface UpdateBasicsInput { display_name?: string; bio?: string; interested_in?: string[]; seeking?: string[]; gender?: string|null; city?: string | null }
 interface UpdateVisibilityInput { show_gender?: boolean; show_orientation?: boolean; show_seeking?: boolean; }
+interface UpdateNotificationsInput { push_opt_in?: boolean; notify_messages?: boolean; notify_likes?: boolean; notify_friend_requests?: boolean }
 interface UpsertPromptInput { id?: number|string; prompt_id: number; response: string | string[]; }
 interface DeletePromptInput { id: number|string; }
 
@@ -79,6 +80,43 @@ export function useProfileMutations(profileId?: string) {
       if (vars && 'show_orientation' in vars) msgs.push('Visibilidad de la sexualidad actualizada');
       if (vars && 'show_seeking' in vars) msgs.push('Visibilidad de “Busco” actualizada');
       toast.show(msgs.length ? msgs.join(' · ') : 'Visibilidad actualizada', 'success');
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['profile:full', profileId] });
+    }
+  });
+
+  const updateNotifications = useMutation({
+    mutationFn: async (input: UpdateNotificationsInput) => {
+      if (!profileId) throw new Error('No profile id');
+      const { error } = await supabase.from('profiles').update(input).eq('id', profileId);
+      if (error) throw error;
+    },
+    onMutate: async (input) => {
+      await qc.cancelQueries({ queryKey: ['profile:full', profileId] });
+      const prev = qc.getQueryData<any>(['profile:full', profileId]);
+      if (prev) {
+        qc.setQueryData(['profile:full', profileId], {
+          ...prev,
+          push_opt_in: input.push_opt_in ?? prev.push_opt_in,
+          notify_messages: input.notify_messages ?? prev.notify_messages,
+          notify_likes: input.notify_likes ?? prev.notify_likes,
+          notify_friend_requests: input.notify_friend_requests ?? prev.notify_friend_requests,
+        });
+      }
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['profile:full', profileId], ctx.prev);
+      toast.show('Error al actualizar notificaciones', 'error');
+    },
+    onSuccess: (_data, vars) => {
+      const msgs: string[] = [];
+      if (vars && 'push_opt_in' in vars) msgs.push(vars.push_opt_in ? 'Notificaciones activadas' : 'Notificaciones desactivadas');
+      if (vars && 'notify_messages' in vars) msgs.push('Mensajes');
+      if (vars && 'notify_likes' in vars) msgs.push('Likes');
+      if (vars && 'notify_friend_requests' in vars) msgs.push('Solicitudes');
+      toast.show(msgs.length ? `Preferencias: ${msgs.join(' · ')}` : 'Preferencias actualizadas', 'success');
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ['profile:full', profileId] });
@@ -250,6 +288,14 @@ export function useProfileMutations(profileId?: string) {
       const url = await uploadSinglePhoto({ userId: profileId, uri: input.fileUri, resize: { maxWidth: 1080, maxHeight: 1080, quality: 0.78 } });
       const { error: updErr } = await supabase.from('user_photos').update({ url }).eq('id', input.id);
       if (updErr) throw updErr;
+      // If avatar is not set or empty string, set it to this updated photo to avoid missing avatar on profile
+      const { data: prof, error: profGetErr } = await supabase.from('profiles').select('avatar_url').eq('id', profileId).maybeSingle();
+      if (!profGetErr) {
+        const current = (prof as any)?.avatar_url as string | null;
+        if (!current || String(current).trim().length === 0) {
+          await supabase.from('profiles').update({ avatar_url: url }).eq('id', profileId);
+        }
+      }
       return { id: input.id, url };
     },
     onMutate: async (input) => {
@@ -293,5 +339,5 @@ export function useProfileMutations(profileId?: string) {
     onSettled: ()=> { qc.invalidateQueries({ queryKey: ['profile:full', profileId] }); }
   });
 
-  return { updateBasics, updateVisibility, upsertPrompt, deletePrompt, addPhoto, removePhoto, replacePhoto, reorderPhotos };
+  return { updateBasics, updateVisibility, updateNotifications, upsertPrompt, deletePrompt, addPhoto, removePhoto, replacePhoto, reorderPhotos };
 }

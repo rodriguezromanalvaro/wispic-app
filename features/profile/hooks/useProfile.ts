@@ -25,7 +25,7 @@ export function useProfile(targetId?: string): UseProfileResult {
     queryFn: async (): Promise<FullProfile | null> => {
       const { data: profile, error: pErr } = await supabase
         .from('profiles')
-        .select('id, display_name, bio, calculated_age, gender, birthdate, is_premium, verified_at, interested_in, seeking, show_orientation, show_gender, show_seeking, avatar_url, city')
+        .select('id, display_name, bio, calculated_age, gender, birthdate, is_premium, verified_at, interested_in, seeking, show_orientation, show_gender, show_seeking, avatar_url, city, push_opt_in, notify_messages, notify_likes, notify_friend_requests')
         .eq('id', profileId)
         .maybeSingle();
       if (pErr) throw pErr;
@@ -100,6 +100,10 @@ export function useProfile(targetId?: string): UseProfileResult {
         show_orientation: profile.show_orientation ?? true,
         show_gender: profile.show_gender ?? true,
         show_seeking: profile.show_seeking ?? true,
+        push_opt_in: (profile as any).push_opt_in ?? false,
+        notify_messages: (profile as any).notify_messages ?? true,
+        notify_likes: (profile as any).notify_likes ?? true,
+        notify_friend_requests: (profile as any).notify_friend_requests ?? true,
         avatar_url: profile.avatar_url,
         prompts,
         photos_count: photos?.length || 0,

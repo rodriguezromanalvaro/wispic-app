@@ -13,6 +13,7 @@ import { theme } from '../../../lib/theme';
 import { ensureMatchConsistency } from '../../../lib/match';
 import { remainingSuperlikes, incSuperlike } from '../../../lib/superlikes';
 import * as Haptics from 'expo-haptics';
+import { SwipeButtons } from '../../../components/swipe/SwipeButtons';
 
 interface ProfileRow { id: string; display_name: string | null; calculated_age?: number | null; gender?: string | null; interests?: string[] | null; avatar_url?: string | null; interested_in?: string[] | null; seeking?: string[] | null }
 type CardProfile = {
@@ -911,44 +912,12 @@ export default function EventSwipeScreen() {
       {/* Botonera inferior accesible */}
       {current && !isLoading && (
         <View pointerEvents='box-none' style={{ position:'absolute', left:0, right:0, bottom:0 }}>
-          <View style={{ paddingHorizontal:26, paddingTop:12, paddingBottom:14 }}>
-            <View style={{ flexDirection:'row', justifyContent:'space-around', alignItems:'center' }}>
-              <Pressable
-                accessibilityLabel='Descartar'
-                onPress={() => performAction(current.id, 'pass')}
-                style={({pressed}) => ({ width:62, height:62, borderRadius:31, alignItems:'center', justifyContent:'center', shadowColor:'#000', shadowOpacity:0.35, shadowRadius:10, elevation:4, transform:[{ scale: pressed? 0.92:1 }] })}
-              >
-                <LinearGradient colors={['#ff5f5f','#d93333']} start={{x:0,y:0}} end={{x:1,y:1}} style={{ position:'absolute', inset:0, borderRadius:31 }} />
-                <View style={{ position:'absolute', inset:-4, borderRadius:40, backgroundColor:'rgba(255,95,95,0.18)' }} />
-                <Text style={{ fontSize:26, fontWeight:'800', color:'#fff' }}>✕</Text>
-                <Text style={{ position:'absolute', bottom:6, fontSize:9.5, fontWeight:'600', letterSpacing:0.5, color:'rgba(255,255,255,0.85)' }}>NOPE</Text>
-              </Pressable>
-              <Pressable
-                accessibilityLabel='Superlike'
-                disabled={remaining <= 0}
-                onPress={() => performAction(current.id, 'superlike')}
-                style={({pressed}) => ({ width:72, height:72, borderRadius:36, alignItems:'center', justifyContent:'center', opacity: remaining<=0?0.5:1, shadowColor:'#000', shadowOpacity:0.4, shadowRadius:12, elevation:5, transform:[{ scale: pressed?0.9:1 }] })}
-              >
-                <LinearGradient colors={ remaining<=0 ? ['#555','#333'] : [theme.colors.primary,'#7d55ff']} start={{x:0,y:0}} end={{x:1,y:1}} style={{ position:'absolute', inset:0, borderRadius:36 }} />
-                <View style={{ position:'absolute', inset:-6, borderRadius:50, backgroundColor: remaining<=0? 'rgba(255,255,255,0.05)':'rgba(125,85,255,0.25)' }} />
-                <Text style={{ fontSize:30, fontWeight:'800', color: theme.colors.primaryText || '#fff', textShadowColor:'rgba(0,0,0,0.4)', textShadowOffset:{width:0,height:1}, textShadowRadius:4 }}>⭐</Text>
-                <View style={{ position:'absolute', top:-2, right:-2, backgroundColor:'rgba(0,0,0,0.55)', paddingHorizontal:6, paddingVertical:2, borderRadius:12, borderWidth:1, borderColor:'rgba(255,255,255,0.18)' }}>
-                  <Text style={{ color:'#fff', fontSize:10, fontWeight:'700' }}>{remaining}</Text>
-                </View>
-                <Text style={{ position:'absolute', bottom:7, fontSize:10, fontWeight:'700', color:'rgba(255,255,255,0.9)', letterSpacing:0.5 }}>SUPER</Text>
-              </Pressable>
-              <Pressable
-                accessibilityLabel='Like'
-                onPress={() => performAction(current.id, 'like')}
-                style={({pressed}) => ({ width:62, height:62, borderRadius:31, alignItems:'center', justifyContent:'center', shadowColor:'#000', shadowOpacity:0.35, shadowRadius:10, elevation:4, transform:[{ scale: pressed? 0.92:1 }] })}
-              >
-                <LinearGradient colors={['#ff5fa3','#ff3461']} start={{x:0,y:0}} end={{x:1,y:1}} style={{ position:'absolute', inset:0, borderRadius:31 }} />
-                <View style={{ position:'absolute', inset:-4, borderRadius:40, backgroundColor:'rgba(255,63,125,0.20)' }} />
-                <Text style={{ fontSize:26, fontWeight:'800', color:'#fff' }}>❤</Text>
-                <Text style={{ position:'absolute', bottom:6, fontSize:9.5, fontWeight:'600', letterSpacing:0.5, color:'rgba(255,255,255,0.85)' }}>LIKE</Text>
-              </Pressable>
-            </View>
-          </View>
+          <SwipeButtons
+            onPass={() => current && performAction(current.id, 'pass')}
+            onLike={() => current && performAction(current.id, 'like')}
+            onSuperLike={() => current && performAction(current.id, 'superlike')}
+            remaining={remaining}
+          />
         </View>
       )}
       {match && (

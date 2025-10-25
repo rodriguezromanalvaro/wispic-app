@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Modal, Pressable, Text } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Screen, Card, H1, P, Button, TextInput, Switch, SelectionTile } from '../../components/ui';
+import { Screen, H1, P, Button } from '../../components/ui';
 import { theme } from '../../lib/theme';
 import { useTranslation } from 'react-i18next';
 import { useProfile } from '../../features/profile/hooks/useProfile';
@@ -148,15 +148,32 @@ export default function ProfileTab() {
     }
   }
 
+  // Avatar source with resilient fallback (use profile.avatar_url or first photo URL)
+  const primaryAvatar = data?.avatar_url || null;
+  const fallbackAvatar = (data?.photos && data.photos.length > 0) ? (data.photos[0]?.url || null) : null;
+  const [avatarSrc, setAvatarSrc] = useState<string | null>(primaryAvatar || fallbackAvatar);
+  useEffect(() => {
+    setAvatarSrc(primaryAvatar || fallbackAvatar || null);
+  }, [primaryAvatar, fallbackAvatar]);
+
   return (
     <Screen style={{ padding: 0 }} edges={[]}>
-      <CenterScaffold variant='auth' paddedTop={60}>
-        <ScrollView contentContainerStyle={{ paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
+      <CenterScaffold variant='auth' style={{ paddingHorizontal: 0, maxWidth: 99999 }}>
+        <ScrollView contentContainerStyle={{ paddingTop: 16, paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
           {/* Encabezado con avatar, nombre y edad */}
           <View style={styles.center}> 
             <View style={styles.headerRow}>
-              {data?.avatar_url ? (
-                <Image source={{ uri: data.avatar_url }} style={styles.avatar} />
+              {avatarSrc ? (
+                <Image source={{ uri: avatarSrc }} style={styles.avatar}
+                  onError={() => {
+                    // If main avatar fails and we have a different fallback, swap once
+                    if (fallbackAvatar && avatarSrc !== fallbackAvatar) {
+                      setAvatarSrc(fallbackAvatar);
+                    } else {
+                      setAvatarSrc(null);
+                    }
+                  }}
+                />
               ) : (
                 <View style={styles.avatarFallback}>
                   <Ionicons name="person" size={36} color={theme.colors.textDim} />
@@ -302,18 +319,18 @@ export default function ProfileTab() {
 }
 
 const styles = StyleSheet.create({
-  center: { alignItems: 'center', paddingHorizontal: 20, gap: 16 },
-  title: { color: theme.colors.text, fontSize: 30, fontWeight: '800', textAlign: 'center' },
-  subtitle: { color: theme.colors.subtext, fontSize: 16, textAlign: 'center', marginHorizontal: 12, marginBottom: 8 },
-  headerRow: { width:'100%', maxWidth: 520, flexDirection:'row', alignItems:'center', gap: 12 },
+  center: { alignItems: 'flex-start', paddingHorizontal: 16, gap: 12 },
+  title: { color: theme.colors.text, fontSize: 28, fontWeight: '800', textAlign: 'left' },
+  subtitle: { color: theme.colors.subtext, fontSize: 16, textAlign: 'left', marginHorizontal: 0, marginBottom: 8 },
+  headerRow: { width:'100%', flexDirection:'row', alignItems:'center', gap: 12 },
   avatar: { width: 72, height: 72, borderRadius: 36, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
   avatarFallback: { width: 72, height: 72, borderRadius: 36, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface, alignItems:'center', justifyContent:'center' },
   nameAge: { color: theme.colors.text, fontSize: 28, fontWeight:'800', textAlign: 'left' },
-  grid: { width: '100%', maxWidth: 520, gap: 12, marginTop: 16 },
-  card: { width: '100%', maxWidth: 520, padding: theme.spacing(2), borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border, gap: 6 },
+  grid: { width: '100%', gap: 12, marginTop: 16 },
+  card: { width: '100%', padding: theme.spacing(2), borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border, gap: 6 },
   cardTitle: { color: theme.colors.text, fontSize: 18, fontWeight: '800' },
   cardBody: { color: theme.colors.subtext },
-  gridWrap: { width: '100%', maxWidth: 420, alignSelf: 'center', flexDirection:'row', flexWrap:'wrap', gap: 8, justifyContent:'flex-start', marginTop: 8 },
+  gridWrap: { width: '100%', flexDirection:'row', flexWrap:'wrap', gap: 8, justifyContent:'flex-start', marginTop: 8 },
   thumbWrap: { position: 'relative', borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: theme.colors.border },
   thumb: { borderRadius: 14 },
   editBtn: { position: 'absolute', top: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12, paddingHorizontal: 6, paddingVertical: 6 },
@@ -327,7 +344,7 @@ const styles = StyleSheet.create({
   sheetIconWrap: { width: 28, height: 28, alignItems:'center', justifyContent:'center', borderRadius: 6, backgroundColor: theme.mode==='dark' ? 'rgba(255,255,255,0.06)' : '#F1F5F9' },
   sheetTitle: { color: theme.colors.text, fontWeight:'700' },
   sheetDesc: { color: theme.colors.textDim, fontSize: 12 },
-  logoutWrap: { width: '100%', maxWidth: 520, alignSelf:'center', paddingHorizontal: 20, paddingVertical: 12, marginTop: 8, marginBottom: 12, alignItems:'center' },
+  logoutWrap: { width: '100%', alignSelf:'flex-start', paddingHorizontal: 16, paddingVertical: 12, marginTop: 8, marginBottom: 12, alignItems:'flex-start' },
   logoutBtn: { flexDirection:'row', alignItems:'center', gap: 8, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: 'transparent' }
   ,
   // Premium hero styles

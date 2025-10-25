@@ -2,9 +2,9 @@ import i18next from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import * as Localization from 'expo-localization';
 // Cargar recursos extra (orientation, seeking, etc.)
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+ 
 const esExtra = require('../i18n/es.json');
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+ 
 const enExtra = require('../i18n/en.json');
 
 // Recursos base mínimos + placeholders de auth para evitar mostrar claves

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Switch, ScrollView, Alert } from 'react-native';
-import { supabase } from '../lib/supabase';
 import { theme } from '../lib/theme';
 import { Card } from './ui';
 

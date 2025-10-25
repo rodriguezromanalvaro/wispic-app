@@ -116,7 +116,7 @@ export default function StepPermissions() {
         didSyncRef.current = true;
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   async function requestPush(): Promise<boolean> {

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View, SectionList, Dimensions } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CenterScaffold } from '../../../components/Scaffold';
 import { OnboardingHeader } from '../../../components/OnboardingHeader';
 import { Screen, Card, H1, P, Button, StickyFooterActions } from '../../../components/ui';

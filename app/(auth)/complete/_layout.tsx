@@ -4,7 +4,7 @@ import { CompleteProfileProvider } from '../../../lib/completeProfileContext';
 export default function CompleteFlowLayout() {
   return (
     <CompleteProfileProvider>
-      <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+      <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
   {/* 1-10: pasos obligatorios */}
   <Stack.Screen name="welcome" />
   <Stack.Screen name="name" />
