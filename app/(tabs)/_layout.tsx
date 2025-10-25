@@ -2,8 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Tabs, usePathname, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, Text, Image, Pressable } from 'react-native';
 import { BlendHeaderBackground } from '../../components/design/BlendHeaderBackground';
 import { useQuery } from '@tanstack/react-query';
 import { useFocusEffect } from '@react-navigation/native';

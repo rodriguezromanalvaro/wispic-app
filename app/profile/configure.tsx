@@ -10,7 +10,6 @@ import { useProfile } from '../../features/profile/hooks/useProfile';
 import { useProfileMutations } from '../../features/profile/hooks/useProfileMutations';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { registerPushTokenForUser, clearPushToken } from '../../lib/push';
-import CityPickerSheet from '../../components/location/CityPickerSheet';
 
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (

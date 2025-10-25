@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { View, Text, Dimensions, Image, ActivityIndicator, Alert, Pressable } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '../../../lib/useAuth';
 import { supabase } from '../../../lib/supabase';
