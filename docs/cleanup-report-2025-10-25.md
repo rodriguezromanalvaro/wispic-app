@@ -94,3 +94,19 @@ Madge lists many files in `app/**` and some in `components/**`, `features/**` as
 5) Optional: gradually enable `noUnusedLocals` and `noUnusedParameters` in tsconfig for stricter hygiene.
 
 > Note: Do not delete `app/**` files purely based on orphan reports; Expo Router discovers them at runtime.
+
+## Round 2 — 2025-10-25
+
+Changes applied safely on branch `chore/repo-cleanup-setup-2025-10-25`:
+
+- Tooling config refined:
+  - Knip patterns simplified; Unimported now ignores `app/**` to avoid Expo Router false positives.
+- Automated cleanup:
+  - ESLint autofix removed unused imports in a few screens.
+- Dependency pruning (verified via code search and passing checks):
+  - Removed: expo-apple-authentication, expo-background-fetch, expo-local-authentication, expo-task-manager, react-native-avoid-softinput, react-native-maps, tamagui (top-level), @tamagui/text.
+  - Kept: @tamagui/config (used via `tamagui.config.ts`), expo-build-properties/expo-updates/expo-camera (used via app.config plugins or runtime).
+- Validation gates: Typecheck PASS, Tests PASS, Lint PASS.
+
+Notes:
+- Many “unused dependencies” reported by static tools are actually used via `app.config.ts` (plugins) or dynamically. Cross-checks were performed before removal.
