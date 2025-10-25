@@ -110,3 +110,16 @@ Changes applied safely on branch `chore/repo-cleanup-setup-2025-10-25`:
 
 Notes:
 - Many “unused dependencies” reported by static tools are actually used via `app.config.ts` (plugins) or dynamically. Cross-checks were performed before removal.
+
+## Round 3 — 2025-10-25
+
+Medium-risk UI modules under `features/profile/**` confirmed unused and removed safely:
+
+- Deleted: `features/profile/view/ProfileScreen.tsx`.
+- Deleted folders: `features/profile/components/**`, `features/profile/components/sections/**`, `features/profile/sheets/**`.
+
+Rationale:
+- No imports from `app/**` or elsewhere to these files (verified via global grep and analyzer orphans with `app/**` ignored).
+- `app/(tabs)/profile.tsx` and `app/profile/photos.tsx` implement the active UI and only depend on hooks under `features/profile/hooks/*` (kept).
+
+Validation gates after deletion: Typecheck PASS, Lint PASS, Tests PASS.

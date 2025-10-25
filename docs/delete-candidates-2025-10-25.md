@@ -83,3 +83,13 @@ Keep:
 - Optionally, move them first to `backups/attic-2025-10-25/` if you prefer a softer rollback than Git history.
 
 If you approve, I can execute the deletions and push as part of this same branch.
+
+---
+
+Applied — 2025-10-25
+
+- Deleted components (Risk Low): Avatar.tsx, ProfileAchievements.tsx, ProfileCompletion.tsx, ProfileNotificationSettings.tsx, ProfileNotifications.tsx, ProfilePhotos.tsx, ProfilePrompts.tsx, ProfileStats.tsx, ProfileCompletionBadge.tsx.
+- Deleted lib (Risk Low): auth-helpers.ts, hooks/useEventDetail.ts, stores/eventSheet.ts, userPrefs.ts, match.ts, paywallStore.ts, premium.ts, profileMappings.ts, prompts.ts, storage.ts, supabase-owner.ts, superlikes.ts, completeProfileContext.tsx, hooks/useOwner.ts.
+- Deleted features/profile UI set (Risk Med): view/ProfileScreen.tsx, components/**, components/sections/**, sheets/**.
+
+Validation after deletions: Typecheck PASS, Lint PASS, Tests PASS.
