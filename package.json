@@ -24,7 +24,7 @@
     "verify": "npm run lint:repo && npm run typecheck && npm run test",
     "ci:verify": "npm run lint:repo && npm run typecheck && npm run test",
     "backfill:cities": "ts-node scripts/backfill-city-coords.ts",
-    
+  "eas-build-pre-build": "node scripts/write-google-services.js",
     "icon:shrink": "ts-node scripts/shrink-adaptive-foreground.ts",
     "perf:audit": "node scripts/run_perf_audit.js",
     "db:apply:safe": "node scripts/run_sql_files.js supabase/migrations/20251016_120017_advisor_sequences_ownership_fix.sql supabase/migrations/20251016_120016_advisor_fk_indexes_autofix.sql",
