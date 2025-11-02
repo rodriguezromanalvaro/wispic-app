@@ -1,6 +1,7 @@
 // app.config.ts
-import { ExpoConfig } from 'expo/config';
 import fs from 'fs';
+
+import { ExpoConfig } from 'expo/config';
 
 const config: ExpoConfig = {
   name: 'Wispic',
@@ -31,6 +32,8 @@ const config: ExpoConfig = {
       NSFaceIDUsageDescription:
         'Usamos Face ID para iniciar sesión de forma rápida y segura.',
       UIBackgroundModes: ['location'],
+      // Required by App Store Connect metadata
+      ITSAppUsesNonExemptEncryption: false,
     },
     // Si añades GoogleService-Info.plist en la raíz del repo, descomenta/ajusta esta ruta
     // googleServicesFile: './GoogleService-Info.plist',
@@ -52,7 +55,10 @@ const config: ExpoConfig = {
       // Android 13+ granular media permission for images/photos
       'READ_MEDIA_IMAGES',
   ],
-  ...(fs.existsSync('./google-services.json') ? { googleServicesFile: './google-services.json' } : {}),
+    // Provide google-services.json directly from the repo to avoid relying on EAS file secrets.
+    // This file is a non-sensitive client config and safe to commit for development.
+    // Expo prebuild will copy it into android/app/google-services.json automatically.
+    googleServicesFile: './google-services.dev.json',
     adaptiveIcon: {
       // Foreground 1024x1024 con transparencia (negro o blanco en PNG)
       foregroundImage: './assets/adaptive-icon-foreground.png',
