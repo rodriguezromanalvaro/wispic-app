@@ -1,60 +1,49 @@
-// lib/premium.ts
-import { create } from 'zustand';
-import { supabase } from './supabase';
+import { create } from 'zustand'
 
-type PremiumStore = {
-  isPremium: boolean;
-  loading: boolean;
-  lastUserId: string | null;
-  refresh: (userId: string) => Promise<void>;
-  setPremium: (userId: string, value: boolean) => Promise<void>;
-};
+import { supabase } from './supabase'
 
-export const usePremiumStore = create<PremiumStore>((set, get) => ({
+// Minimal premium store used by PaywallModal
+// Assumes a boolean column `is_premium` exists in `profiles` table. If not, calls will be no-ops.
+
+type State = {
+  isPremium: boolean
+  lastUserId: string | null
+}
+
+type Actions = {
+  refresh: (userId: string) => Promise<void>
+  setPremium: (userId: string, value: boolean) => Promise<void>
+}
+
+export const usePremiumStore = create<State & Actions>((set, _get) => ({
   isPremium: false,
-  loading: false,
   lastUserId: null,
 
   refresh: async (userId: string) => {
-    const _cur = get().lastUserId;
-    set({ loading: true, lastUserId: userId });
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('is_premium')
         .eq('id', userId)
-        .maybeSingle();
-      if (error) throw error;
-      set({ isPremium: !!data?.is_premium, loading: false });
+        .maybeSingle()
+      if (error) throw error
+      const flag = Boolean((data as any)?.is_premium)
+      set({ isPremium: flag, lastUserId: userId })
     } catch {
-      // en error no forzamos premium
-      set({ loading: false });
+      // keep previous value
     }
   },
 
   setPremium: async (userId: string, value: boolean) => {
-    set({ loading: true });
     try {
       const { error } = await supabase
         .from('profiles')
-        .update({ is_premium: value })
-        .eq('id', userId);
-      if (error) throw error;
-      set({ isPremium: value, loading: false, lastUserId: userId });
+        .update({ is_premium: value, updated_at: new Date().toISOString() })
+        .eq('id', userId)
+      if (error) throw error
+      set({ isPremium: value, lastUserId: userId })
     } catch {
-      set({ loading: false });
-      throw new Error('No se pudo actualizar premium');
+      // swallow
     }
   },
-}));
-
-// Helper cómodo
-export async function ensurePremiumFresh(userId?: string | null) {
-  if (!userId) return false;
-  const { refresh, isPremium, lastUserId } = usePremiumStore.getState();
-  if (lastUserId !== userId) {
-    await refresh(userId);
-    return usePremiumStore.getState().isPremium;
-  }
-  return isPremium;
-}
+}))

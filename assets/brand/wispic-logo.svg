@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="256" viewBox="0 0 1024 256" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Wispic logo">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#5B8CFF"/>
+      <stop offset="100%" stop-color="#62E0B8"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#101827"/>
+      <stop offset="100%" stop-color="#0B1220"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Badge mark -->
+  <g transform="translate(24,24)">
+    <rect x="0" y="0" width="208" height="208" rx="40" fill="url(#g2)"/>
+    <!-- Stylized W -->
+    <path d="M36 56l28 96 34-60 34 60 28-96" stroke="url(#g)" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+
+  <!-- Wordmark -->
+  <g transform="translate(264,56)" fill="#0B1220">
+    <text font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="120" font-weight="700" y="124">
+      <tspan fill="url(#g)">W</tspan><tspan fill="#0B1220">ispic</tspan>
+    </text>
+  </g>
+</svg>

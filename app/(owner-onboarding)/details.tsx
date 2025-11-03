@@ -1,15 +1,21 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
+
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
-import { Screen, H1, P, TextInput, SelectionTile, StickyFooterActions } from '../../components/ui';
-import { OwnerBackground } from '../../components/OwnerBackground';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CenterScaffold } from '../../components/Scaffold';
-import { ProgressHeader } from '../../features/owner/onboarding/ProgressHeader';
-import { useOwnerOnboarding } from '../../features/owner/onboarding/state';
+
 import { router } from 'expo-router';
+
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { CenterScaffold } from 'components/Scaffold';
+import { Screen, H1, P, TextInput, SelectionTile, StickyFooterActions } from 'components/ui';
+import { ProgressHeader } from 'features/owner/onboarding/ProgressHeader';
+import { useOwnerOnboarding } from 'features/owner/onboarding/state';
+import { OwnerBackground } from 'features/owner/ui/OwnerBackground';
+
 // City and address are now collected in Basic step; no Supabase fetch needed here
 
-const CATEGORIES = ['Bar', 'Discoteca', 'Sala de conciertos', 'Sala de eventos', 'Pub'];
+// Simplified categories as requested
+const CATEGORIES = ['Bar/Discoteca', 'Sala de conciertos', 'Otro'];
 
 export default function OwnerDetails() {
 	const store = useOwnerOnboarding();
@@ -22,9 +28,9 @@ export default function OwnerDetails() {
 							<Screen style={{ padding: 0, gap: 0 }} edges={['bottom']}>
 							<ProgressHeader step={2} total={4} style={{ position: 'absolute' }} />
 							<CenterScaffold transparentBg variant="minimal" paddedTop={insets.top + 52}>
-					<KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 8 : 0} style={{ flex: 1 }}>
+					<KeyboardAvoidingView behavior={'padding'} keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 8 : 0} style={{ flex: 1 }}>
 					<View style={{ flex: 1 }}>
-											<ScrollView contentContainerStyle={styles.center} keyboardShouldPersistTaps="handled">
+											<ScrollView contentContainerStyle={styles.center} keyboardShouldPersistTaps="always" keyboardDismissMode="none">
 					<H1 style={styles.title}>Detalles del local</H1>
 
 					<P style={styles.label}>Categoría</P>
@@ -43,7 +49,7 @@ export default function OwnerDetails() {
 													</View>
 														<StickyFooterActions
 											actions={[
-												{ title: 'Continuar', onPress: () => router.push('/(owner-onboarding)/media' as any), disabled: !canNext, gradientColors: ['#60A5FA','#2563EB'] },
+																{ title: 'Continuar', onPress: () => router.push('/(owner-onboarding)/media' as any), disabled: !canNext },
 																	{ title: 'Atrás', onPress: () => router.back(), variant: 'outline' }
 											]}
 										/>

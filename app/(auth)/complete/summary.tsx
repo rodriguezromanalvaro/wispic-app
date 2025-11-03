@@ -1,16 +1,23 @@
-import { KeyboardAvoidingView, Platform, StyleSheet, View, ScrollView } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CenterScaffold } from '../../../components/Scaffold';
-import { Screen, Card, H1, P, Button, StickyFooterActions } from '../../../components/ui';
-import { theme } from '../../../lib/theme';
-import { useCompleteProfile } from '../../../lib/completeProfileContext';
-import { useRouter } from 'expo-router';
-import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
+
+import { KeyboardAvoidingView, Platform, StyleSheet, View, ScrollView } from 'react-native';
 import { Image, FlatList } from 'react-native';
-import { supabase } from '../../../lib/supabase';
-import { useAuth } from '../../../lib/useAuth';
-import { SaveCongratsOverlay } from '../../../components/SaveCongratsOverlay';
+
+import { useRouter } from 'expo-router';
+
+import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { GlassCard } from 'components/GlassCard';
+import { CenterScaffold } from 'components/Scaffold';
+import { Screen, H1, P, Button, StickyFooterActions } from 'components/ui';
+import { useCompleteProfile } from 'features/profile/model';
+import { getGenderLabel, getOrientationOptions } from 'features/profile/model';
+import { OnboardingHeader } from 'features/profile/ui/OnboardingHeader';
+import { SaveCongratsOverlay } from 'features/profile/ui/SaveCongratsOverlay';
+import { supabase } from 'lib/supabase';
+import { theme } from 'lib/theme';
+import { useAuth } from 'lib/useAuth';
 
 export default function StepSummary() {
   const { draft, saveToSupabase } = useCompleteProfile();
@@ -75,13 +82,8 @@ export default function StepSummary() {
   return (
     <Screen style={{ padding: 0, gap: 0 }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-  <CenterScaffold variant='auth' paddedTop={Math.max(insets.top, 60)}>
-          <View style={[styles.progressWrap,{ top: insets.top + 8 }] }>
-            <View style={styles.progressBg}>
-              <View style={[styles.progressFill, { width: `${(10/10)*100}%` }]} />
-            </View>
-            <P style={styles.progressText}>{t('complete.progress', { current: 10, total: 10 })}</P>
-          </View>
+        <CenterScaffold variant='auth' paddedTop={Math.max(insets.top, 60)}>
+          <OnboardingHeader step={10} total={10} />
           <ScrollView
             style={{ flex: 1, width: '100%' }}
             contentContainerStyle={styles.scrollContent}
@@ -91,7 +93,7 @@ export default function StepSummary() {
             <H1 style={styles.title}>{t('complete.summaryTitle')}</H1>
             <P style={styles.subtitle}>{t('complete.summarySubtitle')}</P>
 
-            <Card style={styles.card}>
+            <GlassCard padding={16} elevationLevel={1} style={styles.card}>
               <View style={styles.rows}>
                 {/* Name */}
                 <View style={styles.row}>
@@ -112,7 +114,7 @@ export default function StepSummary() {
                   <View style={styles.rowHeader}>
                     {(() => {
                       const g = draft.gender as any;
-                      const genderText = g ? t(`complete.${g}`, g) : '—';
+                      const genderText = g ? getGenderLabel(g, t) : '—';
                       return (
                         <P style={styles.rowText}>
                           {t('complete.fieldGender')}: <P style={styles.rowValue}>{genderText}{(! (draft.show_gender ?? true) && draft.gender) ? ' 🔒' : ''}</P>
@@ -135,7 +137,12 @@ export default function StepSummary() {
                 <View style={styles.row}>
                   <View style={styles.rowHeader}>
                     <P style={styles.rowText}>
-                      {t('complete.fieldInterestedIn','Me interesa')}: <P style={styles.rowValue}>{(draft.interested_in||[]).map(k=> t(`orientation.${k}`, k)).join(' • ') || '—'}{(! (draft.show_orientation ?? true) && (draft.interested_in||[]).length) ? ' 🔒' : ''}</P>
+                      {t('complete.fieldInterestedIn','Me interesa')}: <P style={styles.rowValue}>{(() => {
+                        const tf = (k: string, def?: string) => t(k as any, def as any);
+                        const map = new Map<string,string>((getOrientationOptions(tf) as any[]).map(o => [o.code, o.label]));
+                        const list = (draft.interested_in||[]).map(k=> map.get(k) || k);
+                        return list.length ? list.join(' • ') : '—';
+                      })()}{(! (draft.show_orientation ?? true) && (draft.interested_in||[]).length) ? ' 🔒' : ''}</P>
                     </P>
                     <Button title={t('common.edit','Edit')} variant="ghost" onPress={() => router.push('(auth)/complete/orientation' as any)} style={styles.editBtn} />
                   </View>
@@ -218,7 +225,7 @@ export default function StepSummary() {
                 )}
               </View>
 
-            </Card>
+            </GlassCard>
           </ScrollView>
           <StickyFooterActions
             actions={[
@@ -236,7 +243,7 @@ export default function StepSummary() {
             onSecondary={() => { setSaved(false); router.push({ pathname: '(auth)/complete/prompts', params: { post: '1' } } as any); }}
             onRequestClose={() => setSaved(false)}
           />
-  </CenterScaffold>
+        </CenterScaffold>
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -244,15 +251,12 @@ export default function StepSummary() {
 
 const styles = StyleSheet.create({
   gradient: { flex: 1, paddingHorizontal: 20, paddingTop: 60, paddingBottom: 24 },
-  progressWrap: { position: 'absolute', top: 16, left: 20, right: 20, gap: 6 },
-  progressBg: { width: '100%', height: 6, backgroundColor: theme.colors.surface, borderRadius: 999, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: theme.colors.primary, borderRadius: 999 },
-  progressText: { color: theme.colors.textDim, fontSize: 12 },
+  // progress handled via OnboardingHeader
   // Scroll content: flexGrow allows it to fill viewport; justifyContent centers only if content is short
   scrollContent: { flexGrow: 1, alignItems: 'center', justifyContent: 'flex-start', gap: 16, paddingBottom: 40 },
   title: { color: theme.colors.text, fontSize: 30, fontWeight: '800', textAlign: 'center', marginTop: 18 },
   subtitle: { color: theme.colors.subtext, fontSize: 16, textAlign: 'center', marginHorizontal: 12, marginBottom: 8 },
-  card: { width: '100%', maxWidth: 420, padding: theme.spacing(2), borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
+  card: { width: '100%', maxWidth: 420, padding: theme.spacing(2), borderRadius: 16 },
   rows: { gap: 12 },
   row: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   rowNoBorder: { paddingVertical: 8 },

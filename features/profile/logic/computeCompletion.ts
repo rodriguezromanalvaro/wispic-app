@@ -1,4 +1,4 @@
-import { Profile } from '../../../lib/types';
+import { Profile } from 'lib/types';
 
 export type CompletionResult = {
   score: number;

@@ -1,10 +1,14 @@
-import React from 'react';
-import { LinearGradient } from 'expo-linear-gradient';
+import type { ReactNode } from 'react';
+
 import { View, StyleSheet, ViewStyle } from 'react-native';
-import { theme } from '../lib/theme';
+
+import { LinearGradient } from 'expo-linear-gradient';
+
+import { useMemo } from 'react';
+import { useThemeMode } from 'lib/theme-context';
 
 interface CenterScaffoldProps {
-  children: React.ReactNode;
+  children: ReactNode;
   /**
    * minimal -> fondo neutro oscuro casi plano (colores sólo en CTAs)
    * auth -> (ahora delega a minimal para no saturar) antes era brand
@@ -20,7 +24,8 @@ interface CenterScaffoldProps {
   transparentBg?: boolean;
 }
 
-export const CenterScaffold: React.FC<CenterScaffoldProps> = ({ children, variant='profile', paddedTop=0, style, topAccent, transparentBg }) => {
+export const CenterScaffold = ({ children, variant='profile', paddedTop=0, style, topAccent, transparentBg }: CenterScaffoldProps) => {
+  const { theme } = useThemeMode();
   const maxWidth = (variant === 'auth') ? theme.layout.authWidth : theme.layout.maxWidth;
 
   if (transparentBg) {

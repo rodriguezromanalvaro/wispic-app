@@ -1,8 +1,9 @@
 // components/paywall.tsx
-import React from 'react';
 import { View, Text } from 'react-native';
+
+import { theme } from 'lib/theme';
+
 import { Button, Card } from './ui';
-import { theme } from '../lib/theme';
 
 type Props = {
   onClose?: () => void;

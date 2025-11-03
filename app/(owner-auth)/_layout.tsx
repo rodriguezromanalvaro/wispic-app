@@ -1,11 +1,12 @@
+import { useMemo } from 'react';
+
 import { Stack } from 'expo-router';
-import { applyPalette, theme } from '../../lib/theme';
-import { useEffect } from 'react';
+
+import { useThemeMode } from 'lib/theme-context';
 
 export default function OwnerAuthLayout() {
-  useEffect(() => {
-    applyPalette('owner');
-    return () => { applyPalette('coral'); };
-  }, []);
-  return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.colors.bg } }} />;
+  // Do NOT switch to owner palette for owner-auth; keep whatever palette is active (auth = magenta)
+  const { theme } = useThemeMode();
+  const contentStyle = useMemo(() => ({ backgroundColor: theme.colors.bg }), [theme]);
+  return <Stack screenOptions={{ headerShown: false, animation: 'fade', contentStyle }} />;
 }

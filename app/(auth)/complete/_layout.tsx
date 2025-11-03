@@ -1,10 +1,19 @@
+import { useEffect, useCallback } from 'react';
+
 import { Stack } from 'expo-router';
-import { CompleteProfileProvider } from '../../../lib/completeProfileContext';
+
+import { CompleteProfileProvider } from 'features/profile/model';
+import { applyPalette } from 'lib/theme';
+
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function CompleteFlowLayout() {
+  // Completar perfil corresponde a usuario final: MAGENTA
+  useEffect(() => { applyPalette('magenta'); }, []);
+  useFocusEffect(useCallback(() => { applyPalette('magenta'); }, []));
   return (
     <CompleteProfileProvider>
-      <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+      <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
   {/* 1-10: pasos obligatorios */}
   <Stack.Screen name="welcome" />
   <Stack.Screen name="name" />

@@ -1,15 +1,30 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, View, StyleSheet, Image, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, BackHandler, Modal } from 'react-native';
-import { Link, useRouter } from 'expo-router';
-import { supabase } from '../../lib/supabase';
-import { Screen, Card, H1, P, TextInput, Button } from '../../components/ui';
-import { theme } from '../../lib/theme';
-import { LinearGradient } from 'expo-linear-gradient';
-import { CenterScaffold } from '../../components/Scaffold';
-import { Ionicons } from '@expo/vector-icons';
-import * as WebBrowser from 'expo-web-browser';
+
+import { Alert, View, StyleSheet, Image, TouchableOpacity, KeyboardAvoidingView, ScrollView, BackHandler, Modal } from 'react-native';
+
 import * as AuthSession from 'expo-auth-session';
+import * as ExpoLinking from 'expo-linking';
+import { getRedirectTo } from 'lib/oauthRedirect';
+import { waitForSession } from 'lib/authDebug';
+import { extractTokens } from 'lib/authUrl';
+import { Link, useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
+import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+
+import { GlassCard } from 'components/GlassCard';
+import { CenterScaffold } from 'components/Scaffold';
+import { Screen, H1, P, TextInput, Button } from 'components/ui';
+import { supabase } from 'lib/supabase';
+import { theme } from 'lib/theme';
+import { PRIVACY_URL, TERMS_URL } from 'lib/brand';
+import { openExternal } from 'lib/links';
+
+
+
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -78,12 +93,7 @@ export default function SignUp() {
 
       if (data.session) {
         setMsg(t('auth.createdSession'));
-        await supabase.from('profiles').insert({
-          id: data.session.user.id,
-          display_name: 'Nuevo Usuario',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
+        // El perfil se crea automáticamente mediante trigger; dejamos que IndexGate dirija al destino correcto
         return gotoHome();
       }
     } finally {
@@ -93,24 +103,68 @@ export default function SignUp() {
 
   const signInWithProvider = async (provider: 'google' | 'apple') => {
     try {
-  setMsg(t('auth.redirecting'));
-  const redirectTo = AuthSession.makeRedirectUri({ scheme: 'wispic', path: 'auth/callback' });
+      setMsg('Abriendo Google…');
+      try { await WebBrowser.warmUpAsync(); } catch {}
+  const redirectTo = getRedirectTo();
+
+      // Evita el flash: mostrar pantalla de callback con spinner antes de abrir navegador
+      try { router.push('/auth/callback'); } catch {}
+  // Asegura que no quede marcado un flujo previo de owner
+  try { await AsyncStorage.removeItem('oauth_flow'); } catch {}
+      let done = false;
+      const sub = ExpoLinking.addEventListener('url', async ({ url }) => {
+        if (done) return;
+        try {
+          await supabase.auth.exchangeCodeForSession(url);
+          done = true;
+          setMsg('');
+          const ok = await waitForSession();
+          if (!ok) {
+            const { access_token, refresh_token } = extractTokens(url);
+            if (access_token && refresh_token) {
+              await supabase.auth.setSession({ access_token, refresh_token });
+            }
+          }
+          router.replace('/');
+        } catch {}
+        finally { try { sub.remove(); } catch {} }
+      });
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
-        options: { redirectTo, skipBrowserRedirect: false },
+        options: { redirectTo, skipBrowserRedirect: true },
       });
       if (error) throw error;
-      // Supabase manejará el deep link y la sesión.
+      if (data?.url) {
+        const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+        if (!done && res.type === 'success' && res.url) {
+          try {
+            await supabase.auth.exchangeCodeForSession(res.url);
+            done = true;
+            setMsg('');
+            const ok2 = await waitForSession();
+            if (!ok2) {
+              const { access_token, refresh_token } = extractTokens(res.url);
+              if (access_token && refresh_token) {
+                await supabase.auth.setSession({ access_token, refresh_token });
+              }
+            }
+            router.replace('/');
+            return;
+          } catch {}
+        }
+      }
     } catch (e: any) {
       Alert.alert('OAuth', e.message || '');
+    } finally {
+      try { await WebBrowser.coolDownAsync(); } catch {}
     }
   };
 
   return (
     <Screen style={{ padding: 0, gap: 0 }}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={'padding'}>
         <CenterScaffold variant='auth' paddedTop={60}>
-          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="always" keyboardDismissMode="none">
         {/* Branding */}
         <View style={styles.header}>
           <Image source={require('../../assets/adaptive-icon-foreground.png')} style={styles.logo} resizeMode="contain" />
@@ -142,7 +196,7 @@ export default function SignUp() {
 
           {/* Email form */}
           {showEmailForm && (
-            <Card style={styles.card}>
+            <GlassCard padding={16} elevationLevel={1} style={styles.card}>
               <P style={styles.label}>{t('auth.email')}</P>
               <TextInput
                 placeholder="tu@email.com"
@@ -197,11 +251,20 @@ export default function SignUp() {
               <TouchableOpacity onPress={() => setShowEmailForm(false)} style={{ alignSelf: 'center', marginTop: 8 }}>
                 <P style={{ color: theme.colors.primary }}>{t('auth.back')}</P>
               </TouchableOpacity>
-            </Card>
+            </GlassCard>
           )}
 
           <P style={styles.terms}>
-            {t('auth.terms1')}<P style={styles.termsLink}>{t('auth.terms2')}</P> y <P style={styles.termsLink}>{t('auth.privacy')}</P>.
+            {t('auth.terms1')}
+            <TouchableOpacity onPress={() => openExternal(TERMS_URL)}>
+              <P style={styles.termsLink}>{t('auth.terms2')}</P>
+            </TouchableOpacity>
+            {' '}
+            y{' '}
+            <TouchableOpacity onPress={() => openExternal(PRIVACY_URL)}>
+              <P style={styles.termsLink}>{t('auth.privacy')}</P>
+            </TouchableOpacity>
+            .
           </P>
 
           <View style={{ height: 8 }} />
@@ -213,7 +276,7 @@ export default function SignUp() {
           {/* Modal: cuenta existente */}
           <Modal visible={existsOpen} transparent animationType="fade" onRequestClose={() => setExistsOpen(false)}>
             <View style={styles.modalOverlay}>
-              <Card style={styles.modalCard}>
+              <GlassCard padding={16} elevationLevel={2} style={styles.modalCard}>
                 <H1 style={{ textAlign: 'center', marginBottom: 6 }}>¡Vaya!</H1>
                 <P style={{ color: theme.colors.textDim, textAlign: 'center', marginBottom: 2 }}>Parece que esa cuenta ya está registrada.</P>
                 <P style={{ color: theme.colors.textDim, textAlign: 'center', marginBottom: 12 }}>Prueba a iniciar sesión o usa otro correo.</P>
@@ -221,7 +284,7 @@ export default function SignUp() {
                   <Button title={'Iniciar sesión'} onPress={() => { setExistsOpen(false); try { router.replace('/(auth)/sign-in' as any); } catch {} }} style={styles.button} />
                   <Button title={'Usar otro correo'} onPress={() => setExistsOpen(false)} variant="outline" />
                 </View>
-              </Card>
+              </GlassCard>
             </View>
           </Modal>
         </CenterScaffold>

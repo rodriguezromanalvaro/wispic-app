@@ -152,6 +152,58 @@ Si se rompe la pantalla en el futuro: hacer `git reset --hard baseline-events-re
 	```
 
 Requisitos:
-- `google-services.json` presente y correcto.
+- `google-services.json` presente y correcto (incluido en `android/app`).
 - `app.config.ts` tiene `extra.eas.projectId`.
 - Permiso de notificaciones concedido en el dispositivo (Android 13+ pide POST_NOTIFICATIONS).
+- Usa un Dev Client o build standalone (Expo Go no soporta tokens push).
+
+---
+
+## Ubicación: Google Places (tipo “Maps”) con fallback sin coste
+
+El selector de ciudad usa Google Places Autocomplete para una experiencia "tipo Maps". Si no configuras la clave, la app sigue funcionando con el geocodificador del sistema (menos preciso, sin coste de Google).
+
+### 1) Habilita APIs en Google Cloud
+- En tu proyecto de Google Cloud, ve a “APIs & Services → Library” y habilita:
+	- Places API (o “Places API (New)” si aparece) — para Autocomplete y Place Details
+	- Opcional, si renderizas mapas nativos: Maps SDK for Android y Maps SDK for iOS
+
+### 2) Crea/restringe tu API Key (recomendado)
+- “APIs & Services → Credentials → Create credentials → API key”.
+- Application restrictions:
+	- Para Places Web Service (llamado desde la app): normalmente “None” o restricciones por API; evita exponer la key fuera de builds de confianza.
+	- Para SDKs nativos (si usas mapas): restringe por app (Android package + SHA-1; iOS bundle ID/team).
+- API restrictions: limita al menos a “Places API” y, si aplica, a “Maps SDK for Android/iOS”.
+
+### 3) Añade la clave al proyecto (desarrollo local en Windows PowerShell)
+
+En esta sesión de PowerShell (solo temporal):
+
+```powershell
+$env:GOOGLE_PLACES_API_KEY = "<TU_CLAVE_DE_PLACES>"
+# Opcional, si usas mapas nativos en iOS/Android
+$env:ANDROID_GOOGLE_MAPS_API_KEY = "<TU_CLAVE_MAPS_ANDROID>"
+$env:IOS_GOOGLE_MAPS_API_KEY = "<TU_CLAVE_MAPS_IOS>"
+
+# Reinicia el bundler después de establecer las variables
+npm start
+```
+
+Notas:
+- `app.config.ts` ya lee estas variables (`process.env.GOOGLE_PLACES_API_KEY`, `ANDROID_GOOGLE_MAPS_API_KEY`, `IOS_GOOGLE_MAPS_API_KEY`).
+- No guardes claves reales en el repo. Si quieres persistirlas entre sesiones, crea variables de entorno de usuario en Windows o usa un gestor de secretos.
+
+### 4) Builds en EAS (CI/CD)
+- Sube las claves como secretos en EAS en vez de hardcodearlas. Por ejemplo:
+
+```powershell
+eas secret:create --name GOOGLE_PLACES_API_KEY --value <TU_CLAVE>
+eas secret:create --name ANDROID_GOOGLE_MAPS_API_KEY --value <TU_CLAVE_ANDROID>
+eas secret:create --name IOS_GOOGLE_MAPS_API_KEY --value <TU_CLAVE_IOS>
+```
+
+### 5) Costes y buenas prácticas
+- Usa session tokens para Autocomplete (ya implementado) y pide Place Details solo al seleccionar; reduce facturación.
+- Configura alertas de presupuesto en Google Cloud (Billing → Budgets & alerts).
+- Si no hay clave, el selector usa el geocoder del sistema como fallback.
+

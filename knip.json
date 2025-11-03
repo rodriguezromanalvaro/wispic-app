@@ -1,0 +1,31 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "entry": [
+    "app/**/*.{ts,tsx}",
+    "components/**/*.{ts,tsx}",
+    "features/**/*.{ts,tsx}",
+    "lib/**/*.{ts,tsx}"
+  ],
+  "project": [
+    "app/**/*",
+    "components/**/*",
+    "features/**/*",
+    "lib/**/*"
+  ],
+  "ignore": [
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.d.ts",
+    "**/android/**",
+    "**/ios/**",
+    "**/build/**",
+    "**/dist/**",
+    "**/vendor/**",
+    "**/backups/**",
+    "**/docs/**",
+    "advisor_report/**",
+    "supabase/**",
+    "scripts/**"
+  ]
+}

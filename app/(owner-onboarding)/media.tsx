@@ -1,13 +1,18 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+
 import { View, StyleSheet, Image, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
-import { Screen, H1, P, Button, StickyFooterActions } from '../../components/ui';
-import { OwnerBackground } from '../../components/OwnerBackground';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CenterScaffold } from '../../components/Scaffold';
+
 import * as ImagePicker from 'expo-image-picker';
-import { ProgressHeader } from '../../features/owner/onboarding/ProgressHeader';
-import { useOwnerOnboarding } from '../../features/owner/onboarding/state';
 import { router } from 'expo-router';
+
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { CenterScaffold } from 'components/Scaffold';
+import { Screen, H1, P, Button, StickyFooterActions } from 'components/ui';
+import { ProgressHeader } from 'features/owner/onboarding/ProgressHeader';
+import { useOwnerOnboarding } from 'features/owner/onboarding/state';
+import { OwnerBackground } from 'features/owner/ui/OwnerBackground';
+
 
 export default function OwnerMedia() {
 	const store = useOwnerOnboarding();
@@ -45,9 +50,9 @@ export default function OwnerMedia() {
 							<Screen style={{ padding: 0, gap: 0 }} edges={['bottom']}>
 											<ProgressHeader step={3} total={4} style={{ position: 'absolute' }} />
 											<CenterScaffold transparentBg variant="minimal" paddedTop={insets.top + 52}>
-									<KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 8 : 0} style={{ flex: 1 }}>
+									<KeyboardAvoidingView behavior={'padding'} keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 8 : 0} style={{ flex: 1 }}>
 									<View style={{ flex: 1 }}>
-											<ScrollView contentContainerStyle={styles.center} keyboardShouldPersistTaps="handled">
+											<ScrollView contentContainerStyle={styles.center} keyboardShouldPersistTaps="always" keyboardDismissMode="none">
 					<H1 style={styles.title}>Sube el avatar del local</H1>
 					<P>Esta imagen representará tu local y será visible para los usuarios.</P>
             {pickError ? <P style={{ color: '#ef4444' }}>{pickError}</P> : null}
@@ -71,7 +76,7 @@ export default function OwnerMedia() {
 										</View>
 											<StickyFooterActions
 								actions={[
-									{ title: 'Continuar', onPress: () => router.push('/(owner-onboarding)/goals' as any), disabled: !canNext, gradientColors: ['#60A5FA','#2563EB'] },
+													{ title: 'Continuar', onPress: () => router.push('/(owner-onboarding)/goals' as any), disabled: !canNext },
 														{ title: 'Atrás', onPress: () => router.back(), variant: 'outline' }
 								]}
 							/>

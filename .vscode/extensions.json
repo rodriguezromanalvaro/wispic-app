@@ -1,0 +1,7 @@
+{
+  "recommendations": [
+    "zernonia.supabase-vscode",
+    "ms-ossdata.vscode-pgsql"
+  ],
+  "unwantedRecommendations": []
+}

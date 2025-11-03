@@ -1,0 +1,29 @@
+{
+  "entry": [
+    "app/_layout.tsx",
+    "app/index.tsx"
+  ],
+  "ignorePatterns": [
+    "app/**",
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.d.ts",
+    "android/**",
+    "ios/**",
+    "build/**",
+    "dist/**",
+    "vendor/**",
+    "backups/**",
+    "docs/**",
+    "advisor_report/**",
+    "supabase/**",
+    "scripts/**"
+  ],
+  "reportFiles": [
+    "app/**/*.{ts,tsx}",
+    "components/**/*.{ts,tsx}",
+    "features/**/*.{ts,tsx}",
+    "lib/**/*.{ts,tsx}"
+  ]
+}

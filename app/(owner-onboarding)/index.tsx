@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
+
 import { View, Text, Animated, StyleSheet } from 'react-native';
-import { OwnerBackground } from '../../components/OwnerBackground';
-import { theme } from '../../lib/theme';
+
 import { router } from 'expo-router';
-import { Button } from '../../components/ui';
+
+import { Button } from 'components/ui';
+import { useOwnerOnboarding } from 'features/owner/onboarding/state';
+import { OwnerBackground } from 'features/owner/ui/OwnerBackground';
+import { theme } from 'lib/theme';
 
 const BLUE = '#3B82F6'; // blue-500
 const BLUE_LIGHT = '#BFDBFE'; // blue-200
@@ -24,12 +28,16 @@ const slides = [
 ];
 
 export default function OwnerOnboardingWelcome() {
+	// Select only what we need from the store to prevent effect loops on state changes
+	const reset = useOwnerOnboarding((s) => s.reset);
 	const [index, setIndex] = useState(0);
 	const opacity = useRef(new Animated.Value(1)).current;
 	const translateY = useRef(new Animated.Value(0)).current;
 
 	// Skip this screen if coming from owner sign-up welcome; go straight to basic
 	useEffect(() => {
+		// Siempre arrancamos el onboarding con estado limpio (solo una vez por montaje)
+		reset();
 		const id = setTimeout(() => {
 			router.replace('/(owner-onboarding)/basic' as any);
 		}, 200);

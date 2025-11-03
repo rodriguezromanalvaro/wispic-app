@@ -1,11 +1,15 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '../../../../lib/supabase';
-import { Screen, Card } from '../../../../components/ui';
-import TopBar from '../../../../components/TopBar';
 import { ActivityIndicator, FlatList, Text, View, Pressable } from 'react-native';
-import { theme } from '../../../../lib/theme';
-import { venueTypeIcons, type VenueType } from '../../../../types/venues';
+
+import { useLocalSearchParams, useRouter } from 'expo-router';
+
+import { useQuery } from '@tanstack/react-query';
+
+import EmptyState from 'components/EmptyState';
+import TopBar from 'components/TopBar';
+import { Screen, Card } from 'components/ui';
+import { supabase } from 'lib/supabase';
+import { theme } from 'lib/theme';
+import { venueTypeIcons, type VenueType } from 'types/venues';
 
 export default function SeriesDetails() {
   const { seriesId } = useLocalSearchParams<{ seriesId: string }>();
@@ -34,7 +38,6 @@ export default function SeriesDetails() {
   const seriesVenue: any = Array.isArray((series as any)?.venue) ? (series as any).venue[0] : (series as any).venue;
 
   // For nightclub series we will show ALL upcoming dates, but highlight current week subset separately
-  const isNightclub = seriesVenue?.venue_type === 'nightclub';
 
       const now = new Date();
       const dow = (now.getDay() + 6) % 7; // Monday=0
@@ -44,7 +47,7 @@ export default function SeriesDetails() {
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekStart.getDate() + 7);
 
-      const minStart = new Date(Math.max(now.getTime(), weekStart.getTime()));
+  // const minStart = new Date(Math.max(now.getTime(), weekStart.getTime()));
 
       let evq = supabase
         .from('events')
@@ -147,9 +150,12 @@ export default function SeriesDetails() {
           </Pressable>
         )}
         ListEmptyComponent={
-          <Card style={{ margin: 16 }}>
-            <Text style={{ color: theme.colors.text }}>No hay próximas fechas.</Text>
-          </Card>
+          <EmptyState
+            title="No hay próximas fechas"
+            subtitle="Vuelve pronto: añadiremos nuevas fechas en cuanto estén disponibles."
+            iconName="calendar-outline"
+            style={{ margin: 16 }}
+          />
         }
       />
     </Screen>

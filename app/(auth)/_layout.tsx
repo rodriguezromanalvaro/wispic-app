@@ -1,15 +1,18 @@
-import { Stack, useRouter } from 'expo-router';
-import { supabase } from '../../lib/supabase';
+import { useEffect, useCallback } from 'react';
+
+import { Stack } from 'expo-router';
+import { applyPalette } from 'lib/theme';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function AuthLayout() {
-  const router = useRouter();
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    router.replace('/'); // vuelve al index que redirige a sign-in
-  };
-
+  // Todo lo híbrido (auth) debe ser MAGENTA siempre
+  useEffect(() => { applyPalette('magenta'); }, []);
+  // Reaplicar cuando el stack recupere foco (volver desde owner, etc.)
+  useFocusEffect(useCallback(() => {
+    applyPalette('magenta');
+  }, []));
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
       <Stack.Screen name="sign-up" />
     </Stack>
   );

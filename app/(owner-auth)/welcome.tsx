@@ -1,22 +1,27 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Animated, Easing, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Dimensions, BackHandler } from 'react-native';
-import { Screen, H1, P, Button, Card } from '../../components/ui';
-import { CenterScaffold } from '../../components/Scaffold';
-import { router } from 'expo-router';
-import { theme } from '../../lib/theme';
-import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../../lib/supabase';
-import * as WebBrowser from 'expo-web-browser';
-import * as AuthSession from 'expo-auth-session';
-import { LinearGradient } from 'expo-linear-gradient';
-import { OwnerBackground, OWNER_BLUE_GRADIENT, OWNER_BLUE_SOFT, OWNER_GLOW_TOP, OWNER_GLOW_BOTTOM, OWNER_BLUE_VEIL } from '../../components/OwnerBackground';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
-const BLUE = '#3B82F6';
-const BLUE_GRADIENT = OWNER_BLUE_GRADIENT; // azul claro -> azul intenso
-const BLUE_SOFT = OWNER_BLUE_SOFT;
-const GLOW_TOP = OWNER_GLOW_TOP;
-const GLOW_BOTTOM = OWNER_GLOW_BOTTOM;
-const BLUE_VEIL = OWNER_BLUE_VEIL;
+import { View, Text, Animated, Easing, StyleSheet, KeyboardAvoidingView, TouchableOpacity, BackHandler } from 'react-native';
+
+import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
+import * as ExpoLinking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getRedirectTo } from 'lib/oauthRedirect';
+import { waitForSession } from 'lib/authDebug';
+import { extractTokens } from 'lib/authUrl';
+
+import { Ionicons } from '@expo/vector-icons';
+
+import { CenterScaffold } from 'components/Scaffold';
+import { Screen, H1, P, Button, Card } from 'components/ui';
+import { OwnerBackground } from 'features/owner/ui/OwnerBackground';
+import { supabase } from 'lib/supabase';
+import { applyPalette } from 'lib/theme';
+import { useThemeMode } from 'lib/theme-context';
+
+// Owner palette derives from theme via applyPalette('owner'); use theme tokens
+// Glows/veil constants are available from OwnerBackground if needed later
 const slides = [
   { title: 'Atrae nuevos clientes', body: 'Publica tus eventos o planes y deja que los usuarios te descubran.' },
   { title: 'Fácil y rápido', body: 'Configura tu local en menos de 5 minutos y empieza a disfrutar de los beneficios de Wispic.' },
@@ -24,6 +29,7 @@ const slides = [
 ];
 
 export default function OwnerWelcome() {
+  const { theme } = useThemeMode();
   const [index, setIndex] = useState(0);
   const x = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
@@ -48,13 +54,10 @@ export default function OwnerWelcome() {
     return () => clearInterval(id);
   }, [opacity, x]);
 
-  // Ensure hardware back goes directly to the sign-in screen without flicker
+  // Ensure hardware back goes directly to the sign-in screen; we DON'T change palette here
   useEffect(() => {
     const onBack = () => {
-      try {
-        // Replace directly to sign-in to avoid intermediate screen flash
-        router.replace('/(auth)/sign-in' as any);
-      } catch {}
+      try { router.replace('/(auth)/sign-in' as any); } catch {}
       return true; // prevent default
     };
     const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
@@ -67,21 +70,75 @@ export default function OwnerWelcome() {
 
   const signInWithProvider = async (provider: 'google' | 'apple') => {
     try {
-      const redirectTo = 'wispic://auth/callback';
+      try { await WebBrowser.warmUpAsync(); } catch {}
+      const redirectTo = getRedirectTo();
+      // Evita el flash: navega al callback con spinner antes de abrir navegador
+      // Marca flujo como "owner" ANTES de navegar, para evitar condiciones de carrera
+      try { await AsyncStorage.setItem('oauth_flow', 'owner'); } catch {}
+      try { router.push('/auth/callback'); } catch {}
+      let done = false;
+      const sub = ExpoLinking.addEventListener('url', async ({ url }) => {
+        if (done) return;
+        try {
+          await supabase.auth.exchangeCodeForSession(url);
+          done = true;
+          const ok = await waitForSession();
+          if (!ok) {
+            const { access_token, refresh_token } = extractTokens(url);
+            if (access_token && refresh_token) {
+              await supabase.auth.setSession({ access_token, refresh_token });
+            }
+          }
+          // Asegura el marcado de intención de owner inmediatamente, sin depender del callback
+          try {
+            await supabase.auth.updateUser({ data: { owner: true } as any });
+          } catch {}
+          try { await AsyncStorage.removeItem('oauth_flow'); } catch {}
+          router.replace('/');
+        } catch {}
+        finally { try { sub.remove(); } catch {} }
+      });
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
-        options: { redirectTo, skipBrowserRedirect: false },
+        options: { redirectTo, skipBrowserRedirect: true },
       });
       if (error) throw error;
+      if (data?.url) {
+        const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+          if (!done && res.type === 'success' && res.url) {
+          try {
+              await supabase.auth.exchangeCodeForSession(res.url);
+            done = true;
+              const ok2 = await waitForSession();
+              if (!ok2) {
+                const { access_token, refresh_token } = extractTokens(res.url);
+                if (access_token && refresh_token) {
+                  await supabase.auth.setSession({ access_token, refresh_token });
+                }
+              }
+            // Asegura el marcado de intención de owner inmediatamente, sin depender del callback
+            try {
+              await supabase.auth.updateUser({ data: { owner: true } as any });
+            } catch {}
+            try { await AsyncStorage.removeItem('oauth_flow'); } catch {}
+            router.replace('/');
+            return;
+          } catch {}
+        }
+      }
     } catch (e: any) {
-      console.log('OAuth error', e?.message);
+      // noop
+    } finally {
+      try { await WebBrowser.coolDownAsync(); } catch {}
     }
   };
+
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   return (
     <OwnerBackground>
       <Screen style={{ padding: 0, gap: 0 }} edges={['top','bottom']}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+  <KeyboardAvoidingView style={{ flex: 1 }} behavior={'padding'}>
   <CenterScaffold variant="minimal" paddedTop={0}>
           <View style={{ flex: 1 }}>
             {/* Glows moved to top-level to avoid width clipping */}
@@ -101,7 +158,7 @@ export default function OwnerWelcome() {
               return (
                 <View style={styles.bubbleWrap}>
                   <LinearGradient
-                    colors={BLUE_SOFT}
+                    colors={theme.gradients.brandSoft as any}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.bubbleGlow}
@@ -121,7 +178,7 @@ export default function OwnerWelcome() {
                         <View style={styles.divider} />
                       </View>
 
-                      <Button title={'Usar correo'} onPress={() => router.push('/(owner-auth)/sign-up?email=1' as any)} style={{ alignSelf: 'stretch' }} gradient gradientColors={BLUE_GRADIENT} />
+                      <Button title={'Usar correo'} onPress={() => router.push('/(owner-auth)/sign-up?email=1' as any)} style={{ alignSelf: 'stretch' }} gradient />
                     </View>
                   </Card>
                 </View>
@@ -136,11 +193,11 @@ export default function OwnerWelcome() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: any) => StyleSheet.create({
   centerStack: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 0, gap: 14 },
   title: { color: theme.colors.text, fontSize: 30, fontWeight: '800', textAlign: 'center', marginTop: 0 },
   slogansWrap: { alignItems: 'center' },
-  slideTitle: { color: BLUE, fontSize: 20, fontWeight: '800', textAlign: 'center', marginTop: 4 },
+  slideTitle: { color: theme.colors.primary, fontSize: 20, fontWeight: '800', textAlign: 'center', marginTop: 4 },
   slideBody: { color: theme.colors.subtext, fontSize: 14, textAlign: 'center', marginTop: 4, marginHorizontal: 16, maxWidth: 520 },
   ctaSubtitle: { color: theme.colors.textDim, textAlign: 'center', marginTop: 4 },
   bubbleWrap: { width: '100%', maxWidth: 520, alignSelf: 'center', position: 'relative' },

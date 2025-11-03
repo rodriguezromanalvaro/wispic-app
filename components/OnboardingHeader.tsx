@@ -1,9 +1,12 @@
-import React from 'react';
+// no default React import needed
 import { View, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { P } from './ui';
-import { theme } from '../lib/theme';
+
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { theme } from 'lib/theme';
+
+import { P } from './ui';
 
 export function OnboardingHeader({ step, total }: { step: number; total: number }) {
   const insets = useSafeAreaInsets();

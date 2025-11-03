@@ -1,4 +1,4 @@
-import { Profile } from '../../../lib/types';
+import { Profile } from 'lib/types';
 
 export interface FullProfile extends Profile {
   interested_in?: string[];
@@ -6,6 +6,12 @@ export interface FullProfile extends Profile {
   show_orientation?: boolean;
   show_gender?: boolean;
   show_seeking?: boolean;
+  max_distance_km?: number;
+  // Notifications
+  push_opt_in?: boolean;
+  notify_messages?: boolean;
+  notify_likes?: boolean;
+  notify_friend_requests?: boolean;
   photos?: { id: number|string; url: string; sort_order?: number; main?: boolean }[];
   avatar_url?: string | null;
   photos_count?: number;

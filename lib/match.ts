@@ -1,100 +1,51 @@
-import { supabase } from './supabase';
+import { supabase } from 'lib/supabase'
 
-type Decision = 'like' | 'superlike' | 'pass';
-const isPositive = (t?: string) => t === 'like' || t === 'superlike';
+// Ensure a match row exists if there is reciprocal like between two users.
+// Returns whether matched and the match id.
+export async function ensureMatchConsistency(userId: string, targetId: string){
+  try {
+    if (!userId || !targetId || userId === targetId) return { matched: false as const, matchId: undefined as string | undefined }
 
-/**
- * Devuelve la ÚLTIMA decisión A->B (o undefined si nunca decidió).
- */
-async function getLastDecision(liker: string, liked: string): Promise<Decision | undefined> {
-  const { data, error } = await supabase
-    .from('likes')
-    .select('type')
-    .eq('liker', liker)
-    .eq('liked', liked)
-    .order('created_at', { ascending: false })
-    .limit(1);
-  if (error) return undefined;
-  return data?.[0]?.type as Decision | undefined;
-}
-
-/**
- * Garantiza que el estado de `matches` refleje las ÚLTIMAS decisiones de ambos.
- * - Si ambas últimas son ❤️/⭐ → asegura que exista match (lo crea si falta).
- * - En cualquier otro caso → asegura que NO exista match (lo borra si estaba).
- *
- * Devuelve:
- *  - matched: estado final (true/false)
- *  - matchId: id si existe
- *  - changed: si insertó o borró algo
- */
-export async function ensureMatchConsistency(aId: string, bId: string): Promise<{ matched: boolean; matchId: number | null; changed: boolean }> {
-  // Orden estable para la fila de matches
-  const ua = aId < bId ? aId : bId;
-  const ub = aId < bId ? bId : aId;
-
-  // Últimas decisiones (en cualquier evento)
-  const [ab, ba] = await Promise.all([
-    getLastDecision(aId, bId),
-    getLastDecision(bId, aId),
-  ]);
-
-  // ¿Existe match hoy?
-  const { data: existing } = await supabase
-    .from('matches')
-    .select('id, superlike')
-    .eq('user_a', ua)
-    .eq('user_b', ub)
-    .maybeSingle();
-
-  const bothPositive = isPositive(ab) && isPositive(ba);
-
-  // Caso 1: ambas positivas → debe existir match
-  if (bothPositive) {
-    if (existing) {
-      // ya existe, quizá actualizamos "superlike" si una de las últimas fue ⭐
-      const usedSuper = ab === 'superlike' || ba === 'superlike';
-      if (existing.superlike !== usedSuper) {
-        await supabase.from('matches').update({ superlike: usedSuper }).eq('id', existing.id);
-        return { matched: true, matchId: existing.id, changed: true };
-      }
-      return { matched: true, matchId: existing.id, changed: false };
-    } else {
-      const usedSuper = ab === 'superlike' || ba === 'superlike';
-      const { data: created, error } = await supabase
-        .from('matches')
-        .insert({ user_a: ua, user_b: ub, superlike: usedSuper })
-        .select('id')
-        .single();
-      if (error || !created) {
-        // carrera: consultar otra vez
-        const { data: again } = await supabase
-          .from('matches')
-          .select('id')
-          .eq('user_a', ua)
-          .eq('user_b', ub)
-          .maybeSingle();
-        return again ? { matched: true, matchId: again.id, changed: false } : { matched: false, matchId: null, changed: false };
-      }
-      return { matched: true, matchId: created.id, changed: true };
+    // 1) Check if target already liked me (like or superlike), any context
+    const { data: reciprocal, error: likeErr } = await supabase
+      .from('likes')
+      .select('id')
+      .eq('liker', targetId)
+      .eq('liked', userId)
+      .in('type', ['like','superlike'] as any)
+      .limit(1)
+    if (likeErr) {
+      console.warn('[match] reciprocal like check error', likeErr.message)
     }
-  }
+    if (!reciprocal || reciprocal.length === 0) {
+      return { matched: false as const, matchId: undefined as string | undefined }
+    }
 
-  // Caso 2: alguna última es ❌ o falta decisión → NO debe existir match
-  if (existing) {
-    await supabase.from('matches').delete().eq('id', existing.id);
-    // opcional: también podrías borrar mensajes del match si quieres "limpieza total"
-    // await supabase.from('messages').delete().eq('match_id', existing.id);
-    return { matched: false, matchId: null, changed: true };
+    // 2) ¿Ya existe un match? (el trigger de DB crea el match cuando hay reciprocidad)
+    const a = userId < targetId ? userId : targetId
+    const b = userId < targetId ? targetId : userId
+    const { data: existing, error: exErr } = await supabase
+      .from('matches')
+      .select('id')
+      .or(`and(user_a.eq.${a},user_b.eq.${b}),and(user_a.eq.${b},user_b.eq.${a})`)
+      .limit(1)
+    if (exErr) console.warn('[match] existing check error', exErr.message)
+    if (existing && existing.length > 0) {
+      const id = (existing as any)[0]?.id
+      // 3) Asegurar match_reads para ambos usuarios (idempotente)
+      try {
+        await supabase.from('match_reads').upsert([
+          { match_id: id, user_id: a },
+          { match_id: id, user_id: b },
+        ] as any, { onConflict: 'match_id,user_id' })
+      } catch (e:any) { console.warn('[match] match_reads upsert error', e?.message) }
+      return { matched: true as const, matchId: id }
+    }
+    // Si no existe match aún, no lo intentamos crear desde cliente (RLS lo impide);
+    // devolvemos matched=false y dejamos que DB sea la fuente de verdad.
+    return { matched: false as const, matchId: undefined as string | undefined }
+  } catch (e:any) {
+    console.warn('[match] ensureMatchConsistency exception', e?.message)
+    return { matched: false as const, matchId: undefined as string | undefined }
   }
-  return { matched: false, matchId: null, changed: false };
-}
-
-/**
- * Atajo: llama a ensureMatchConsistency y, si hay match final, devuelve {matched:true, matchId}.
- * La diferencia con la versión anterior es que aquí nunca deja un match si las últimas decisiones no son positivas.
- */
-export async function checkAndCreateMatch(myId: string, otherId: string) {
-  const res = await ensureMatchConsistency(myId, otherId);
-  return { matched: res.matched, matchId: res.matchId };
 }

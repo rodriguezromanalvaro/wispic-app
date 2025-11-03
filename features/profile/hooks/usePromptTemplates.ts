@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '../../../lib/supabase';
 import { useTranslation } from 'react-i18next';
+
+import { supabase } from 'lib/supabase';
 
 export interface PromptTemplate {
   id: number;

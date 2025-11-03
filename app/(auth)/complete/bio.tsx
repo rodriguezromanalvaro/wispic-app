@@ -1,18 +1,24 @@
-import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CenterScaffold } from '../../../components/Scaffold';
-import { Screen, Card, H1, P, TextInput, Button, StickyFooterActions } from '../../../components/ui';
-import { OnboardingHeader } from '../../../components/OnboardingHeader';
-import { theme } from '../../../lib/theme';
-import { useCompleteProfile } from '../../../lib/completeProfileContext';
-import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
+
+import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+
+import { useLocalSearchParams, useRouter } from 'expo-router';
+
 import { useTranslation } from 'react-i18next';
-import { SaveCongratsOverlay } from '../../../components/SaveCongratsOverlay';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { GlassCard } from 'components/GlassCard';
+import { CenterScaffold } from 'components/Scaffold';
+import { Screen, H1, P, TextInput, StickyFooterActions } from 'components/ui';
+import { useCompleteProfile } from 'features/profile/model';
+import { OnboardingHeader } from 'features/profile/ui/OnboardingHeader';
+import { SaveCongratsOverlay } from 'features/profile/ui/SaveCongratsOverlay';
+import { theme } from 'lib/theme';
+
 
 export default function StepBio() {
   const { draft, setDraft, saveToSupabase } = useCompleteProfile();
-  const [bio, setBio] = useState(draft.bio);
+  const [bio, setBio] = useState<string>(draft.bio || '');
   const router = useRouter();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -33,10 +39,10 @@ export default function StepBio() {
             <H1 style={styles.title}>{t('complete.bioTitleFriendly','Tu toque personal')}</H1>
             <P style={styles.subtitle}>{t('complete.bioSubtitleFriendly','Añade una frase que te caracterice y te haga único/a. Breve y con personalidad.')}</P>
 
-            <Card style={styles.card}>
-              <TextInput value={bio} onChangeText={(txt)=> setBio(txt.slice(0, MAX))} multiline placeholder={t('complete.bioPlaceholderFriendly','Ej.: Fan del café de filtro, paseos largos y cine en VO.')} style={{ minHeight: 120, textAlignVertical: 'top' }} />
+            <GlassCard padding={16} elevationLevel={1} style={styles.card}>
+              <TextInput value={bio} onChangeText={(txt)=> setBio((txt||'').slice(0, MAX))} multiline placeholder={t('complete.bioPlaceholderFriendly','Ej.: Fan del café de filtro, paseos largos y cine en VO.')} style={{ minHeight: 120, textAlignVertical: 'top' }} />
               <P style={{ color: theme.colors.textDim, fontSize: 12, textAlign: 'right', marginTop: 6 }}>{remaining}</P>
-            </Card>
+            </GlassCard>
           </View>
           <StickyFooterActions
             actions={[
@@ -68,5 +74,5 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   title: { color: theme.colors.text, fontSize: 30, fontWeight: '800', textAlign: 'center' },
   subtitle: { color: theme.colors.subtext, fontSize: 16, textAlign: 'center', marginHorizontal: 12, marginBottom: 8 },
-  card: { width: '100%', maxWidth: 420, padding: theme.spacing(2), borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
+  card: { width: '100%', maxWidth: 420, padding: theme.spacing(2), borderRadius: 16 },
 });

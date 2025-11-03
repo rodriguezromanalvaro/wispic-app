@@ -1,6 +1,9 @@
 import { createContext, useContext, useEffect, useState } from 'react';
+
 import { Session, User } from '@supabase/supabase-js';
+
 import { supabase } from './supabase';
+import { applyPalette } from './theme';
 import { Profile } from './types';
 
 type AuthContextType = {
@@ -43,6 +46,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const userId = session?.user?.id;
     if (!userId) {
+      // Ensure palette reverts to magenta as soon as user logs out
+      try { applyPalette('magenta'); } catch {}
       setProfile(null);
       return;
     }

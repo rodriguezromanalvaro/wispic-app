@@ -1,5 +1,6 @@
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+
+import * as Notifications from 'expo-notifications';
 
 export async function registerForPushNotificationsAsync(projectId: string): Promise<string | null> {
   // Request permissions (Android 13+ needs POST_NOTIFICATIONS)
