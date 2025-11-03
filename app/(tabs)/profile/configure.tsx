@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 
-import { View, ScrollView, Pressable, StyleSheet, Modal, BackHandler, Text, Platform } from 'react-native';
+import { View, ScrollView, Pressable, StyleSheet, Modal, BackHandler, Text, Platform, Linking } from 'react-native';
 
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Screen, H1, P, SelectionTile, Button, Card, Switch } from 'components/ui';
+import { Screen, H1, P, SelectionTile, Button, Card, Switch, Chip } from 'components/ui';
 import { useProfile } from 'features/profile/hooks/useProfile';
 import { useProfileMutations } from 'features/profile/hooks/useProfileMutations';
 import { getGenderLabel, getGenderOptions, getOrientationOptions, toOrientationLabels } from 'features/profile/model/mappings';
@@ -21,6 +21,9 @@ import { useAuth } from 'lib/useAuth';
 import { SUPPORT_EMAIL, PRIVACY_URL, TERMS_URL, APP_NAME } from 'lib/brand';
 import { openExternal } from 'lib/links';
 import { useToast } from 'lib/toast';
+import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
+import * as Notifications from 'expo-notifications';
 
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
@@ -56,6 +59,12 @@ export default function ConfigureProfileList() {
   const { data } = useProfile();
   const mutations = useProfileMutations(data?.id);
   const toast = useToast();
+  // Permissions state
+  const [locPerm, setLocPerm] = useState<{ granted: boolean; canAskAgain: boolean }>({ granted: false, canAskAgain: true });
+  const [camPerm, setCamPerm] = useState<{ granted: boolean; canAskAgain: boolean }>({ granted: false, canAskAgain: true });
+  const [mediaPerm, setMediaPerm] = useState<{ granted: boolean; canAskAgain: boolean }>({ granted: false, canAskAgain: true });
+  const [reqLoc, setReqLoc] = useState(false);
+  const [reqCam, setReqCam] = useState(false);
   // const [showCityPicker, setShowCityPicker] = useState(false);
   const [pendingPush, setPendingPush] = useState(false);
   const [showingToken, setShowingToken] = useState<string | null>(null);
@@ -89,6 +98,67 @@ export default function ConfigureProfileList() {
     return () => sub.remove();
   }, [router]);
 
+  useEffect(() => {
+    // initial permissions snapshot
+    (async () => {
+      try {
+        const lp = await Location.getForegroundPermissionsAsync();
+        setLocPerm({ granted: lp.status === 'granted', canAskAgain: (lp as any).canAskAgain ?? true });
+      } catch {}
+      try {
+        const cp = await ImagePicker.getCameraPermissionsAsync();
+        setCamPerm({ granted: cp.status === 'granted', canAskAgain: (cp as any).canAskAgain ?? true });
+      } catch {}
+      try {
+        const mp = await ImagePicker.getMediaLibraryPermissionsAsync();
+        setMediaPerm({ granted: mp.status === 'granted', canAskAgain: (mp as any).canAskAgain ?? true });
+      } catch {}
+    })();
+  }, []);
+
+  async function requestLocation(): Promise<boolean> {
+    try {
+      setReqLoc(true);
+      const current = await Location.getForegroundPermissionsAsync();
+      let status = current.status;
+      if (status !== 'granted') {
+        const req = await Location.requestForegroundPermissionsAsync();
+        status = req.status;
+      }
+      const granted = status === 'granted';
+      const after = await Location.getForegroundPermissionsAsync();
+      setLocPerm({ granted, canAskAgain: (after as any).canAskAgain ?? true });
+      // Persist preference hint
+      try { await mutations.updateBasics.mutateAsync({} as any); } catch {}
+      return granted;
+    } finally { setReqLoc(false); }
+  }
+
+  async function requestCamera(): Promise<boolean> {
+    try {
+      setReqCam(true);
+      const camCurrent = await ImagePicker.getCameraPermissionsAsync();
+      let camStatus = camCurrent.status;
+      if (camStatus !== 'granted') {
+        const camReq = await ImagePicker.requestCameraPermissionsAsync();
+        camStatus = camReq.status;
+      }
+      const galCurrent = await ImagePicker.getMediaLibraryPermissionsAsync();
+      let galStatus = galCurrent.status;
+      if (galStatus !== 'granted') {
+        const galReq = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        galStatus = galReq.status;
+      }
+      const granted = camStatus === 'granted' && galStatus === 'granted';
+      const afterCam = await ImagePicker.getCameraPermissionsAsync();
+      const afterMed = await ImagePicker.getMediaLibraryPermissionsAsync();
+      setCamPerm({ granted: afterCam.status === 'granted', canAskAgain: (afterCam as any).canAskAgain ?? true });
+      setMediaPerm({ granted: afterMed.status === 'granted', canAskAgain: (afterMed as any).canAskAgain ?? true });
+      try { await mutations.updateBasics.mutateAsync({} as any); } catch {}
+      return granted;
+    } finally { setReqCam(false); }
+  }
+
   const openUrl = async (url: string) => {
     try {
       await openExternal(url);
@@ -109,7 +179,7 @@ export default function ConfigureProfileList() {
   };
 
   return (
-    <Screen style={{ padding: 0 }} edges={[]}> 
+    <Screen style={{ padding: 0, backgroundColor: theme.colors.bg }} edges={[]}> 
 
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}>
         {/* Sección Sobre ti */}
@@ -157,6 +227,79 @@ export default function ConfigureProfileList() {
               </View>
             </View>
             <P dim style={{ marginTop: 4 }}>Rango: 5–300 km</P>
+          </View>
+        </Card>
+
+        {/* Permisos del dispositivo */}
+        <SectionHeader title={t('permissions.title','Permisos')}
+          subtitle={t('permissions.subtitle','Activa acceso a ubicación y cámara para mejorar tu experiencia') as any}
+        />
+        <Card style={{ paddingVertical: 8, marginHorizontal: 0, borderTopWidth: 1, borderBottomWidth: 1, borderColor: theme.colors.border }}>
+          {/* Ubicación */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8 }}>
+            <View style={{ flex: 1 }}>
+              <P bold style={{ color: theme.colors.text }}>{t('permissions.locationTitle','Ubicación')}</P>
+              <P dim>{t('permissions.locationDesc','Mejora resultados cercanos al permitir acceso a tu ubicación')}</P>
+              {!locPerm.granted && (
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                  <Chip label={!locPerm.canAskAgain ? `🔒 ${t('permissions.statusBlocked','Bloqueado')}` : `🚫 ${t('permissions.statusDenied','Denegado')}`}
+                    tone={!locPerm.canAskAgain ? 'danger' : 'neutral'}
+                  />
+                </View>
+              )}
+            </View>
+            <View style={{ opacity: (!locPerm.canAskAgain && !locPerm.granted) ? 0.5 : 1 }} pointerEvents={reqLoc ? 'none' : ((!locPerm.canAskAgain && !locPerm.granted) ? 'none' : 'auto')}>
+              <Switch
+                value={!!locPerm.granted}
+                onValueChange={async (v) => {
+                  if (v) {
+                    const ok = await requestLocation();
+                    if (!ok) toast.show(t('permissions.locationDenied','No se pudo conceder ubicación'), 'error');
+                  } else {
+                    // No se puede revocar desde la app; sugerir ajustes
+                    Linking.openSettings();
+                  }
+                }}
+              />
+            </View>
+          </View>
+
+          <View style={{ borderTopWidth: 1, borderColor: theme.colors.border }} />
+          {/* Cámara y fotos */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8 }}>
+            <View style={{ flex: 1 }}>
+              <P bold style={{ color: theme.colors.text }}>{t('permissions.cameraTitle','Cámara y fotos')}</P>
+              <P dim>{t('permissions.cameraDesc','Para tomar y subir fotos a tu perfil')}</P>
+              {(!(camPerm.granted && mediaPerm.granted)) && (
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                  {!camPerm.granted && (
+                    <Chip label={`📷 ${t('permissions.cameraLabel','Cámara')}: ${!camPerm.canAskAgain ? t('permissions.statusBlocked','Bloqueado') : t('permissions.statusDenied','Denegado')}`}
+                      tone={!camPerm.canAskAgain ? 'danger' : 'neutral'} />
+                  )}
+                  {!mediaPerm.granted && (
+                    <Chip label={`🖼️ ${t('permissions.photosLabel','Fotos')}: ${!mediaPerm.canAskAgain ? t('permissions.statusBlocked','Bloqueado') : t('permissions.statusDenied','Denegado')}`}
+                      tone={!mediaPerm.canAskAgain ? 'danger' : 'neutral'} />
+                  )}
+                </View>
+              )}
+            </View>
+            <View style={{ opacity: (((!camPerm.canAskAgain && !camPerm.granted) && (!mediaPerm.canAskAgain && !mediaPerm.granted))) ? 0.5 : 1 }} pointerEvents={reqCam ? 'none' : (((!camPerm.canAskAgain && !camPerm.granted) && (!mediaPerm.canAskAgain && !mediaPerm.granted))) ? 'none' : 'auto'}>
+              <Switch
+                value={!!(camPerm.granted && mediaPerm.granted)}
+                onValueChange={async (v) => {
+                  if (v) {
+                    const ok = await requestCamera();
+                    if (!ok) toast.show(t('permissions.cameraDenied','No se pudo conceder cámara o fotos'), 'error');
+                  } else {
+                    Linking.openSettings();
+                  }
+                }}
+              />
+            </View>
+          </View>
+
+          <View style={{ paddingHorizontal: 12, paddingBottom: 10, paddingTop: 4 }}>
+            <Button title={`⚙️ ${t('common.openSettings','Abrir ajustes')}`} variant="outline" onPress={() => Linking.openSettings()} />
           </View>
         </Card>
 
