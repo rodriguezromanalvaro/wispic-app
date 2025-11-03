@@ -60,6 +60,8 @@ export default function ConfigureProfileList() {
   const mutations = useProfileMutations(data?.id);
   const toast = useToast();
   // Permissions state
+  const [pushPerm, setPushPerm] = useState<{ granted: boolean; canAskAgain: boolean }>({ granted: false, canAskAgain: true });
+  const [reqPush, setReqPush] = useState(false);
   const [locPerm, setLocPerm] = useState<{ granted: boolean; canAskAgain: boolean }>({ granted: false, canAskAgain: true });
   const [camPerm, setCamPerm] = useState<{ granted: boolean; canAskAgain: boolean }>({ granted: false, canAskAgain: true });
   const [mediaPerm, setMediaPerm] = useState<{ granted: boolean; canAskAgain: boolean }>({ granted: false, canAskAgain: true });
@@ -102,6 +104,10 @@ export default function ConfigureProfileList() {
     // initial permissions snapshot
     (async () => {
       try {
+        const np = await Notifications.getPermissionsAsync();
+        setPushPerm({ granted: np.status === 'granted', canAskAgain: (np as any).canAskAgain ?? true });
+      } catch {}
+      try {
         const lp = await Location.getForegroundPermissionsAsync();
         setLocPerm({ granted: lp.status === 'granted', canAskAgain: (lp as any).canAskAgain ?? true });
       } catch {}
@@ -115,6 +121,28 @@ export default function ConfigureProfileList() {
       } catch {}
     })();
   }, []);
+
+  async function requestPush(): Promise<boolean> {
+    try {
+      setReqPush(true);
+      const current = await Notifications.getPermissionsAsync();
+      let status = current.status;
+      if (status !== 'granted') {
+        const req = await Notifications.requestPermissionsAsync();
+        status = req.status;
+      }
+      const granted = status === 'granted';
+      const after = await Notifications.getPermissionsAsync();
+      setPushPerm({ granted, canAskAgain: (after as any).canAskAgain ?? true });
+      if (granted && data?.id) {
+        try {
+          await registerPushTokenForUser(data.id);
+          await mutations.updateNotifications.mutateAsync({ push_opt_in: true, notify_messages: true, notify_likes: true, notify_friend_requests: true });
+        } catch {}
+      }
+      return granted;
+    } finally { setReqPush(false); }
+  }
 
   async function requestLocation(): Promise<boolean> {
     try {
@@ -205,6 +233,73 @@ export default function ConfigureProfileList() {
         {/* Distancia de descubrimiento */}
         <SectionHeader title={'Distancia'} subtitle={'Ajusta el radio de personas cercanas'} />
         <Card style={{ paddingVertical: 8, marginHorizontal: 0, borderTopWidth: 1, borderBottomWidth: 1, borderColor: theme.colors.border }}>
+          {/* Notificaciones push */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8 }}>
+            <View style={{ flex: 1 }}>
+              <P bold style={{ color: theme.colors.text }}>{t('permissions.notificationsTitle','Notificaciones')}</P>
+              <P dim>{t('permissions.notificationsDesc','Mensajes, likes y solicitudes de amistad')}</P>
+              {!pushPerm.granted && (
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                  <Chip label={!pushPerm.canAskAgain ? `🔒 ${t('permissions.statusBlocked','Bloqueado')}` : `🚫 ${t('permissions.statusDenied','Denegado')}`}
+                    tone={!pushPerm.canAskAgain ? 'danger' : 'neutral'}
+                  />
+                </View>
+              )}
+            </View>
+            <View style={{ opacity: (!pushPerm.canAskAgain && !pushPerm.granted) ? 0.5 : 1 }} pointerEvents={reqPush ? 'none' : ((!pushPerm.canAskAgain && !pushPerm.granted) ? 'none' : 'auto')}>
+              <Switch
+                value={!!data?.push_opt_in}
+                onValueChange={async (v) => {
+                  if (!data?.id) return;
+                  if (v) {
+                    // If OS perm not granted, ask first
+                    const ok = pushPerm.granted ? true : await requestPush();
+                    if (!ok) { toast.show(t('permissions.pushDenied','No se pudo activar notificaciones'), 'error'); return; }
+                    setPendingPush(true);
+                    try {
+                      await registerPushTokenForUser(data.id);
+                      await mutations.updateNotifications.mutateAsync({ push_opt_in: true, notify_messages: true, notify_likes: true, notify_friend_requests: true });
+                    } finally { setPendingPush(false); }
+                  } else {
+                    setPendingPush(true);
+                    try {
+                      await clearPushToken(data.id);
+                      await mutations.updateNotifications.mutateAsync({ push_opt_in: false, notify_messages: false, notify_likes: false, notify_friend_requests: false });
+                    } finally { setPendingPush(false); }
+                  }
+                }}
+              />
+            </View>
+          </View>
+
+          {/* Toggles por categoría (dependen de OS grant y opt-in) */}
+          <View style={{ borderTopWidth: 1, borderColor: theme.colors.border, marginTop: 8 }} />
+          <View style={{ paddingHorizontal: 12, paddingVertical: 4, gap: 12, opacity: (pushPerm.granted && data?.push_opt_in) ? 1 : 0.6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <P style={{ color: theme.colors.text }}>Mensajes</P>
+              <Switch
+                value={!!data?.notify_messages}
+                onValueChange={(v) => mutations.updateNotifications.mutate({ notify_messages: v })}
+                disabled={!(pushPerm.granted && data?.push_opt_in)}
+              />
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <P style={{ color: theme.colors.text }}>Likes</P>
+              <Switch
+                value={!!data?.notify_likes}
+                onValueChange={(v) => mutations.updateNotifications.mutate({ notify_likes: v })}
+                disabled={!(pushPerm.granted && data?.push_opt_in)}
+              />
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <P style={{ color: theme.colors.text }}>Solicitudes de amistad</P>
+              <Switch
+                value={!!data?.notify_friend_requests}
+                onValueChange={(v) => mutations.updateNotifications.mutate({ notify_friend_requests: v })}
+                disabled={!(pushPerm.granted && data?.push_opt_in)}
+              />
+            </View>
+          </View>
           <View style={{ paddingHorizontal: 12, paddingVertical: 12, gap: 10 }}>
             <P bold style={{ color: theme.colors.text }}>Distancia máxima</P>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -303,132 +398,7 @@ export default function ConfigureProfileList() {
           </View>
         </Card>
 
-        {/* Sección Notificaciones */}
-        <SectionHeader title={t('profile.notifications','Notificaciones')}
-          subtitle={t('profile.notificationsSubtitle','Activa o desactiva las notificaciones push y elige qué recibir') as any}
-        />
-        <Card style={{ paddingVertical: 8, marginHorizontal: 0, borderTopWidth: 1, borderBottomWidth: 1, borderColor: theme.colors.border }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8 }}>
-            <View>
-              <P bold style={{ color: theme.colors.text }}>Notificaciones push</P>
-              <P dim>{data?.push_opt_in ? 'Activadas' : 'Desactivadas'}</P>
-            </View>
-            {data?.push_opt_in ? (
-              <Button
-                title={pendingPush ? 'Desactivando…' : 'Desactivar'}
-                onPress={async () => {
-                  if (!data?.id) return;
-                  try {
-                    setPendingPush(true);
-                    await clearPushToken(data.id);
-                    await mutations.updateNotifications.mutateAsync({ push_opt_in: false });
-                  } finally {
-                    setPendingPush(false);
-                  }
-                }}
-                variant="outline"
-                disabled={pendingPush}
-              />
-            ) : (
-              <Button
-                title={pendingPush ? 'Activando…' : 'Activar'}
-                onPress={async () => {
-                  if (!data?.id) return;
-                  try {
-                    setPendingPush(true);
-                    await registerPushTokenForUser(data.id);
-                    await mutations.updateNotifications.mutateAsync({ push_opt_in: true, notify_messages: true, notify_likes: true, notify_friend_requests: true });
-                  } finally {
-                    setPendingPush(false);
-                  }
-                }}
-                disabled={pendingPush}
-              />
-            )}
-          </View>
-
-          {/* Toggles por categoría */}
-          <View style={{ borderTopWidth: 1, borderColor: theme.colors.border, marginTop: 8 }} />
-          <View style={{ paddingHorizontal: 12, paddingVertical: 4, gap: 12, opacity: data?.push_opt_in ? 1 : 0.6 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <P style={{ color: theme.colors.text }}>Mensajes</P>
-              <Switch
-                value={!!data?.notify_messages}
-                onValueChange={(v) => mutations.updateNotifications.mutate({ notify_messages: v })}
-                disabled={!data?.push_opt_in}
-              />
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <P style={{ color: theme.colors.text }}>Likes</P>
-              <Switch
-                value={!!data?.notify_likes}
-                onValueChange={(v) => mutations.updateNotifications.mutate({ notify_likes: v })}
-                disabled={!data?.push_opt_in}
-              />
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <P style={{ color: theme.colors.text }}>Solicitudes de amistad</P>
-              <Switch
-                value={!!data?.notify_friend_requests}
-                onValueChange={(v) => mutations.updateNotifications.mutate({ notify_friend_requests: v })}
-                disabled={!data?.push_opt_in}
-              />
-            </View>
-          </View>
-
-          {/* Acciones rápidas de notificaciones (útil para depurar sin salir del perfil) */}
-          <View style={{ borderTopWidth: 1, borderColor: theme.colors.border, marginTop: 8 }} />
-          <View style={{ paddingHorizontal: 12, paddingVertical: 12, gap: 10 }}>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              <Button
-                title={busyToken ? 'Obteniendo…' : 'Obtener token'}
-                onPress={async () => {
-                  try {
-                    setBusyToken(true);
-                    const projectId = (Constants as any)?.expoConfig?.extra?.eas?.projectId
-                      ?? (Constants as any)?.easConfig?.projectId
-                      ?? undefined;
-                    if (!projectId) { setShowingToken('(sin projectId)'); return; }
-                    const t = await registerForPushNotificationsAsync(projectId);
-                    setShowingToken(t || '(sin token)');
-                  } catch (e: any) {
-                    // Guía clara cuando FCM no está inicializado en el Dev Client
-                    setShowingToken('FCM no inicializado en este build. Reinstala el Dev Client con google-services.json.');
-                  } finally {
-                    setBusyToken(false);
-                  }
-                }}
-              />
-              <Button
-                title="Local test"
-                variant="outline"
-                onPress={async () => {
-                  await scheduleLocalTestNotification();
-                }}
-              />
-              <Button
-                title={pendingPush ? 'Re-registrando…' : 'Re-registrar token'}
-                variant="ghost"
-                onPress={async () => {
-                  if (!data?.id) return;
-                  try {
-                    setPendingPush(true);
-                    await registerPushTokenForUser(data.id);
-                  } finally {
-                    setPendingPush(false);
-                  }
-                }}
-              />
-            </View>
-            {!!showingToken && (
-              <View style={{ marginTop: 6 }}>
-                <Text selectable style={{ fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }), fontSize: 12, color: theme.colors.textDim }}>
-                  {showingToken}
-                </Text>
-              </View>
-            )}
-          </View>
-        </Card>
+        {/* (Notificaciones fusionadas aquí) */}
 
         {/* Ayuda y Legal */}
         <SectionHeader title={t('support.helpTitle','Ayuda y legal')} />
