@@ -1,4 +1,4 @@
-import { computeFeed, computeSections, RawFeedItem } from '../lib/feed/computeFeed';
+import { computeFeed, computeSections, RawFeedItem } from 'lib/feed/computeFeed';
 
 const baseNow = new Date('2025-10-05T12:00:00Z');
 const iso = (offsetHours: number) => new Date(baseNow.getTime() + offsetHours*3600*1000).toISOString();

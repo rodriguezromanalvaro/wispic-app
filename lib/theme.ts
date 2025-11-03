@@ -84,12 +84,13 @@ const lightColorsMagenta = {
 
 export const theme = {
   mode: 'light' as 'light' | 'dark',
+  currentPalette: 'magenta' as 'coral' | 'magenta' | 'owner',
   colors: lightColorsMagenta,
   darkColors,
   lightColors: lightColorsMagenta,
   // Radio principal según guía (16px en cards/botones grandes)
-  radius: 16,
-  radii: { xs:6, sm:10, md:14, lg:20, pill: 999 },
+  radius: 18,
+  radii: { xs:6, sm:10, md:14, lg:20, xl:24, pill: 999 },
   spacing: (n: number) => n * 8,
   elevation: {
     1: {
@@ -138,6 +139,10 @@ export const palettes = {
     gradients: {
       brand: ['#FF4D8D', '#A855F7'] as [string, string],
       brandSoft: ['rgba(225,29,72,0.16)', 'rgba(168,85,247,0.08)'] as [string, string],
+      // Ensure full reset of background/glow when switching back from owner
+      appBg: ['#FFF5F7', '#FFFFFF', '#FFF5F7'] as [string, string, string],
+      glowTop: ['rgba(225,29,72,0.16)', 'rgba(225,29,72,0)'] as [string, string],
+      glowBottom: ['rgba(225,29,72,0)', 'rgba(168,85,247,0.14)'] as [string, string],
     }
   },
   owner: {
@@ -170,22 +175,38 @@ export const palettes = {
     gradients: {
       brand: ['#60A5FA', '#2563EB'] as [string, string],
       brandSoft: ['rgba(59,130,246,0.16)', 'rgba(59,130,246,0.06)'] as [string, string],
-      appBg: ['#F5F8FF', '#FFFFFF', '#F0F7FF'] as [string, string, string]
+      appBg: ['#F5F8FF', '#FFFFFF', '#F0F7FF'] as [string, string, string],
+      glowTop: ['rgba(59,130,246,0.16)', 'rgba(59,130,246,0)'] as [string, string],
+      glowBottom: ['rgba(59,130,246,0)', 'rgba(59,130,246,0.14)'] as [string, string]
     }
   }
 } as const;
 
 // Helper opcional para cambiar de paleta en runtime (simple mutación)
+type PaletteName = keyof typeof palettes;
+const paletteListeners = new Set<(name: PaletteName) => void>();
+export function onPaletteChange(listener: (name: PaletteName) => void) {
+  paletteListeners.add(listener);
+  return () => paletteListeners.delete(listener);
+}
+
 export function applyPalette(name: keyof typeof palettes) {
   const p = palettes[name];
   if (!p) return;
   // mutamos referencias usadas por la app
+  (theme as any).currentPalette = name;
   (theme as any).colors = p.colors;
   (theme as any).lightColors = p.colors;
   (theme as any).gradients = {
     ...theme.gradients,
     brand: p.gradients.brand,
     brandSoft: p.gradients.brandSoft,
-    ...(p.gradients as any).appBg ? { appBg: (p.gradients as any).appBg } : {}
+    ...(p.gradients as any).appBg ? { appBg: (p.gradients as any).appBg } : {},
+    ...(p.gradients as any).glowTop ? { glowTop: (p.gradients as any).glowTop } : {},
+    ...(p.gradients as any).glowBottom ? { glowBottom: (p.gradients as any).glowBottom } : {}
   } as any;
+  // Notificar suscriptores (ThemeProvider) para re-render
+  try {
+    paletteListeners.forEach((fn) => fn(name));
+  } catch {}
 }

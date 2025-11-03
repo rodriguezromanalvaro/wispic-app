@@ -1,6 +1,6 @@
-import React from 'react';
 import { View, Image, Text } from 'react-native';
-import { theme } from '../lib/theme';
+
+import { theme } from 'lib/theme';
 
 export type AvatarMini = { id: string; avatar_url: string | null };
 
@@ -12,7 +12,7 @@ interface AvatarStackProps {
 }
 
 // Pequeño stack de avatares superpuestos + contador restante.
-export const AvatarStack: React.FC<AvatarStackProps> = ({ avatars, total, size = 24, maxVisible = 5 }) => {
+export const AvatarStack = ({ avatars, total, size = 24, maxVisible = 5 }: AvatarStackProps) => {
   if (!total) return null;
   const shown = avatars.slice(0, maxVisible);
   const remaining = Math.max(0, total - shown.length);

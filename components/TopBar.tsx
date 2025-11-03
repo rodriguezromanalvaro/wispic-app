@@ -1,12 +1,15 @@
 import { Text, Pressable } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { theme } from '../lib/theme';
-
-import Animated, { useAnimatedStyle, interpolate, Extrapolate } from 'react-native-reanimated';
 import { Image, Platform, StyleSheet, View } from 'react-native';
+
 import { BlurView } from 'expo-blur';
+import { useRouter } from 'expo-router';
+
+import { Ionicons } from '@expo/vector-icons';
+import Animated, { useAnimatedStyle, interpolate, Extrapolate } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { theme } from 'lib/theme';
+
 
 type Props = {
   title: string;

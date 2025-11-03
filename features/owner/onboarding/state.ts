@@ -8,11 +8,12 @@ type OwnerGoals = {
 
 type OwnerOnboardingState = {
   name: string;
-  email: string | null;
-  phone: string | null;
   category: string | null;
   cityId: number | null;
   locationText: string | null;
+  placeId: string | null;
+  lat: number | null;
+  lng: number | null;
   description: string | null;
   avatarUri: string | null;
   venueId?: number | null; // guardamos venue_id tras finalizar
@@ -23,11 +24,12 @@ type OwnerOnboardingState = {
 
 const initial: Omit<OwnerOnboardingState, 'set'|'reset'> = {
   name: '',
-  email: null,
-  phone: null,
   category: null,
   cityId: null,
   locationText: null,
+  placeId: null,
+  lat: null,
+  lng: null,
   description: null,
   avatarUri: null,
   venueId: null,

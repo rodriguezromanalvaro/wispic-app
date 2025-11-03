@@ -16,7 +16,9 @@
       "lib/*": ["lib/*"],
       "components/*": ["components/*"],
       "features/*": ["features/*"],
-      "app/*": ["app/*"]
+      "app/*": ["app/*"],
+  "tamagui.config": ["tamagui.config.ts"],
+      "sentry": ["sentry.ts"]
     }
   },
   "include": [

@@ -152,9 +152,10 @@ Si se rompe la pantalla en el futuro: hacer `git reset --hard baseline-events-re
 	```
 
 Requisitos:
-- `google-services.json` presente y correcto.
+- `google-services.json` presente y correcto (incluido en `android/app`).
 - `app.config.ts` tiene `extra.eas.projectId`.
 - Permiso de notificaciones concedido en el dispositivo (Android 13+ pide POST_NOTIFICATIONS).
+- Usa un Dev Client o build standalone (Expo Go no soporta tokens push).
 
 ---
 

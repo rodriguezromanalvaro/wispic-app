@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '../../../lib/supabase';
-import { useAuth } from '../../../lib/useAuth';
-import { filterPublicProfile, annotateOwnerPerspective, FullProfile } from '../logic/privacy';
-import { computeCompletion } from '../logic/computeCompletion';
-import type { Profile as ProfileRow } from '../../../lib/types';
+
+import { computeCompletion } from 'features/profile/logic/computeCompletion';
+import { filterPublicProfile, annotateOwnerPerspective, FullProfile } from 'features/profile/logic/privacy';
+import { supabase } from 'lib/supabase';
+import type { Profile as ProfileRow } from 'lib/types';
+import { useAuth } from 'lib/useAuth';
 
 interface UseProfileResult {
   data: (FullProfile & { completion: ReturnType<typeof computeCompletion> }) | null | undefined;
@@ -25,7 +26,7 @@ export function useProfile(targetId?: string): UseProfileResult {
     queryFn: async (): Promise<FullProfile | null> => {
       const { data: profile, error: pErr } = await supabase
         .from('profiles')
-        .select('id, display_name, bio, calculated_age, gender, birthdate, is_premium, verified_at, interested_in, seeking, show_orientation, show_gender, show_seeking, avatar_url, city, push_opt_in, notify_messages, notify_likes, notify_friend_requests')
+        .select('id, display_name, bio, calculated_age, gender, birthdate, is_premium, verified_at, interested_in, seeking, show_orientation, show_gender, show_seeking, avatar_url, city, city_id, push_opt_in, notify_messages, notify_likes, notify_friend_requests, max_distance_km')
         .eq('id', profileId)
         .maybeSingle();
       if (pErr) throw pErr;
@@ -91,6 +92,8 @@ export function useProfile(targetId?: string): UseProfileResult {
         age: profile.calculated_age,
         gender: profile.gender,
         city: (profile as any).city ?? null,
+        // Expose city_id on the object for internal use (casting to any to avoid wide type changes)
+        ...(typeof (profile as any).city_id !== 'undefined' ? { city_id: (profile as any).city_id } : {}),
         interests,
         is_premium: profile.is_premium,
         birthdate: profile.birthdate,
@@ -99,7 +102,8 @@ export function useProfile(targetId?: string): UseProfileResult {
         seeking: profile.seeking || [],
         show_orientation: profile.show_orientation ?? true,
         show_gender: profile.show_gender ?? true,
-        show_seeking: profile.show_seeking ?? true,
+  show_seeking: profile.show_seeking ?? true,
+        max_distance_km: (profile as any).max_distance_km ?? 50,
         push_opt_in: (profile as any).push_opt_in ?? false,
         notify_messages: (profile as any).notify_messages ?? true,
         notify_likes: (profile as any).notify_likes ?? true,
@@ -132,6 +136,7 @@ export function useProfile(targetId?: string): UseProfileResult {
         age: calcAge,
         gender: fromAuth.gender ?? null,
         city: fromAuth.city ?? null,
+        ...(typeof (fromAuth as any).city_id !== 'undefined' ? { city_id: (fromAuth as any).city_id } : {}),
         interests: fromAuth.interests || [],
         is_premium: fromAuth.is_premium ?? null,
         birthdate: fromAuth.birthdate ?? null,
@@ -140,7 +145,8 @@ export function useProfile(targetId?: string): UseProfileResult {
         seeking: [],
         show_orientation: true,
         show_gender: true,
-        show_seeking: true,
+  show_seeking: true,
+        max_distance_km: 50,
         avatar_url: fromAuth.avatar_url ?? null,
         prompts: fromAuth.prompts || [],
         photos_count: fromAuth.photos_count || 0,

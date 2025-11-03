@@ -1,13 +1,18 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
+
 import { KeyboardAvoidingView, Platform, StyleSheet, View, ScrollView, TextInput as RNTextInput } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CenterScaffold } from '../../../components/Scaffold';
-import { OnboardingHeader } from '../../../components/OnboardingHeader';
-import { Screen, Card, H1, P, StickyFooterActions } from '../../../components/ui';
-import { theme } from '../../../lib/theme';
-import { useCompleteProfile } from '../../../lib/completeProfileContext';
+
 import { useRouter } from 'expo-router';
+
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { GlassCard } from 'components/GlassCard';
+import { CenterScaffold } from 'components/Scaffold';
+import { Screen, H1, P, StickyFooterActions } from 'components/ui';
+import { useCompleteProfile } from 'features/profile/model';
+import { OnboardingHeader } from 'features/profile/ui/OnboardingHeader';
+import { theme } from 'lib/theme';
 
 export default function StepBirth() {
   const insets = useSafeAreaInsets();
@@ -93,7 +98,7 @@ export default function StepBirth() {
           >            
             <H1 style={styles.title}>{titleText}</H1>
             <P style={styles.subtitle}>{t('complete.birthSubtitle')}</P>
-            <Card style={styles.card}>
+            <GlassCard padding={16} elevationLevel={1} style={styles.card}>
               <View style={styles.segmentRow}>
                 <RNTextInput
                   ref={refYear}
@@ -155,7 +160,7 @@ export default function StepBirth() {
               {year.length === 4 && month.length === 2 && day.length === 2 && !validation.ok && (
                 <P style={{ color: '#F97066', fontSize: 12, marginTop: 4 }}>{validation.reason}</P>
               )}
-            </Card>
+            </GlassCard>
           </ScrollView>
           <StickyFooterActions
             actions={[
@@ -175,7 +180,7 @@ const styles = StyleSheet.create({
   scrollContent: { alignItems: 'center', gap: 16, paddingHorizontal: 0 },
   title: { color: theme.colors.text, fontSize: 30, fontWeight: '800', textAlign: 'center' },
   subtitle: { color: theme.colors.subtext, fontSize: 16, textAlign: 'center', marginHorizontal: 12, marginBottom: 8 },
-  card: { width: '100%', maxWidth: 420, padding: theme.spacing(2), borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
+  card: { width: '100%', maxWidth: 420, padding: theme.spacing(2), borderRadius: 16 },
   segmentRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   segmentInput: { flex: 1, backgroundColor: theme.colors.surfaceAlt, color: theme.colors.text, paddingHorizontal: 10, paddingVertical: 10, borderRadius: 10, fontSize: 16 },
   segmentSep: { color: theme.colors.textDim, fontSize: 18, paddingHorizontal: 2 },

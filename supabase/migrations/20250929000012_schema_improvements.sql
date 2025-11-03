@@ -25,6 +25,8 @@ CREATE TABLE public.cities (
   slug text,
   country_code text,
   lon numeric,
+  google_place_id text,
+  geog USER-DEFINED,
   CONSTRAINT cities_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.event_attendance (
@@ -131,6 +133,7 @@ CREATE TABLE public.events (
   price_cents integer,
   currency text DEFAULT 'EUR'::text,
   ticket_url text,
+  geog USER-DEFINED,
   CONSTRAINT events_pkey PRIMARY KEY (id),
   CONSTRAINT events_venue_id_fkey FOREIGN KEY (venue_id) REFERENCES public.venues(id),
   CONSTRAINT events_city_id_fkey FOREIGN KEY (city_id) REFERENCES public.cities(id),
@@ -195,6 +198,18 @@ CREATE TABLE public.messages (
   CONSTRAINT messages_match_id_fkey FOREIGN KEY (match_id) REFERENCES public.matches(id),
   CONSTRAINT messages_sender_fkey FOREIGN KEY (sender) REFERENCES auth.users(id)
 );
+CREATE TABLE public.notification_jobs (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  user_id uuid NOT NULL,
+  type text NOT NULL CHECK (type = ANY (ARRAY['message'::text, 'like'::text, 'match'::text, 'friend_request'::text, 'general'::text])),
+  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  status text NOT NULL DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'processing'::text, 'sent'::text, 'failed'::text])),
+  attempts integer NOT NULL DEFAULT 0,
+  scheduled_at timestamp with time zone NOT NULL DEFAULT now(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT notification_jobs_pkey PRIMARY KEY (id),
+  CONSTRAINT notification_jobs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
 CREATE TABLE public.opening_schedules (
   id bigint NOT NULL DEFAULT nextval('opening_schedules_id_seq'::regclass),
   venue text NOT NULL,
@@ -206,12 +221,34 @@ CREATE TABLE public.opening_schedules (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT opening_schedules_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.owner_onboarding_goals (
+  user_id uuid NOT NULL,
+  venue_id bigint,
+  promote boolean NOT NULL DEFAULT false,
+  attract boolean NOT NULL DEFAULT false,
+  increase_sales boolean NOT NULL DEFAULT false,
+  other text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT owner_onboarding_goals_pkey PRIMARY KEY (user_id),
+  CONSTRAINT owner_onboarding_goals_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT owner_onboarding_goals_venue_id_fkey FOREIGN KEY (venue_id) REFERENCES public.venues(id)
+);
 CREATE TABLE public.profile_interests (
   profile_id uuid NOT NULL,
   interest_id bigint NOT NULL,
   CONSTRAINT profile_interests_pkey PRIMARY KEY (profile_id, interest_id),
   CONSTRAINT profile_interests_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES auth.users(id),
   CONSTRAINT profile_interests_interest_id_fkey FOREIGN KEY (interest_id) REFERENCES public.interests(id)
+);
+CREATE TABLE public.profile_locations (
+  user_id uuid NOT NULL,
+  lat double precision,
+  lng double precision,
+  geog USER-DEFINED,
+  city_label text,
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT profile_locations_pkey PRIMARY KEY (user_id),
+  CONSTRAINT profile_locations_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.profile_prompt_template_locales (
   id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
@@ -261,12 +298,11 @@ CREATE TABLE public.profiles (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   is_premium boolean NOT NULL DEFAULT false,
-  push_token text,
   is_admin boolean DEFAULT false,
   verified_at timestamp with time zone,
   avatar_url text,
   calculated_age integer,
-  interested_in ARRAY DEFAULT '{}'::text[],
+  interested_in ARRAY DEFAULT ARRAY['male'::text, 'female'::text, 'nonbinary'::text],
   show_orientation boolean NOT NULL DEFAULT true,
   show_gender boolean NOT NULL DEFAULT true,
   seeking ARRAY DEFAULT '{}'::text[],
@@ -277,14 +313,15 @@ CREATE TABLE public.profiles (
   notify_messages boolean DEFAULT true,
   notify_likes boolean DEFAULT true,
   notify_friend_requests boolean DEFAULT true,
-  expo_push_token text,
-  onboarding_version smallint DEFAULT 2,
   onboarding_completed boolean DEFAULT false,
   camera_opt_in boolean NOT NULL DEFAULT false,
   show_relationship boolean NOT NULL DEFAULT true,
   city text,
+  max_distance_km integer NOT NULL DEFAULT 50,
+  city_id bigint,
   CONSTRAINT profiles_pkey PRIMARY KEY (id),
-  CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
+  CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id),
+  CONSTRAINT profiles_city_id_fkey FOREIGN KEY (city_id) REFERENCES public.cities(id)
 );
 CREATE TABLE public.prompt_categories (
   id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
@@ -337,6 +374,14 @@ CREATE TABLE public.series_sponsorships (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT series_sponsorships_pkey PRIMARY KEY (id),
   CONSTRAINT series_sponsorships_series_id_fkey FOREIGN KEY (series_id) REFERENCES public.event_series(id)
+);
+CREATE TABLE public.spatial_ref_sys (
+  srid integer NOT NULL CHECK (srid > 0 AND srid <= 998999),
+  auth_name character varying,
+  auth_srid integer,
+  srtext character varying,
+  proj4text character varying,
+  CONSTRAINT spatial_ref_sys_pkey PRIMARY KEY (srid)
 );
 CREATE TABLE public.superlike_counters (
   user_id uuid NOT NULL,
@@ -429,6 +474,10 @@ CREATE TABLE public.venues (
   location_text text,
   description text,
   avatar_url text,
+  lat double precision,
+  lng double precision,
+  geog USER-DEFINED,
+  place_id text,
   CONSTRAINT venues_pkey PRIMARY KEY (id),
   CONSTRAINT venues_city_id_fkey FOREIGN KEY (city_id) REFERENCES public.cities(id)
 );

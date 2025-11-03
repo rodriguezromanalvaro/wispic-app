@@ -1,18 +1,23 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
+
 import { KeyboardAvoidingView, Platform, StyleSheet, View, SectionList, Dimensions } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CenterScaffold } from '../../../components/Scaffold';
-import { OnboardingHeader } from '../../../components/OnboardingHeader';
-import { Screen, Card, H1, P, Button, StickyFooterActions } from '../../../components/ui';
-import { PromptCard } from '../../../components/PromptCard';
-import { ProfilePreviewPane } from '../../../components/ProfilePreviewPane';
-import { theme } from '../../../lib/theme';
-import { useCompleteProfile } from '../../../lib/completeProfileContext';
+
 import { useRouter, useLocalSearchParams } from 'expo-router';
+
 import { useTranslation } from 'react-i18next';
-import { AVAILABLE_PROMPTS } from '../../../lib/prompts';
-import { supabase } from '../../../lib/supabase';
-import { useAuth } from '../../../lib/useAuth';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { GlassCard } from 'components/GlassCard';
+import { PromptCard } from 'components/PromptCard';
+import { CenterScaffold } from 'components/Scaffold';
+import { Screen, H1, P, Button, StickyFooterActions } from 'components/ui';
+import { useCompleteProfile } from 'features/profile/model';
+import { OnboardingHeader } from 'features/profile/ui/OnboardingHeader';
+import { ProfilePreviewPane } from 'features/profile/ui/ProfilePreviewPane';
+import { AVAILABLE_PROMPTS } from 'lib/prompts';
+import { supabase } from 'lib/supabase';
+import { theme } from 'lib/theme';
+import { useAuth } from 'lib/useAuth';
 
 export default function StepPrompts() {
   const insets = useSafeAreaInsets();
@@ -33,9 +38,8 @@ export default function StepPrompts() {
   // Use ReturnType<typeof setTimeout> for React Native (setTimeout returns number, not NodeJS.Timeout)
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isWide = Dimensions.get('window').width > 920;
-  const selectedGlobalCount = useMemo(() => Object.values(answers).reduce((acc, arr) => acc + (arr?.length || 0), 0), [answers]);
   const MAX_TOTAL_CHOICES = 10; // límite global inspirado en la referencia
-  const canSelectMore = selectedGlobalCount < MAX_TOTAL_CHOICES;
+  // const canSelectMore = selectedGlobalCount < MAX_TOTAL_CHOICES; // unused
   // Número de preguntas (templates) con al menos una respuesta
   const answeredQuestionsCount = useMemo(() => {
     if (!templates?.length) return 0;
@@ -150,14 +154,14 @@ export default function StepPrompts() {
           });
         } else {
           // fallback a AVAILABLE_PROMPTS en formato choice
-          list = AVAILABLE_PROMPTS.map((p, idx) => ({ id: 1000 + idx, key: p.key, type: p.type, choices: p.choices || [], max_choices: 1, icon: undefined }));
+          list = AVAILABLE_PROMPTS.map((p: typeof AVAILABLE_PROMPTS[number], idx: number) => ({ id: 1000 + idx, key: p.key, type: p.type, choices: p.choices || [], max_choices: 1, icon: undefined }));
         }
         if (active) {
           setTemplates(list);
           // Debug logs eliminados
           // Inicializar answers a lo que ya exista en draft
           const map: Record<string, string[]> = {};
-            draft.prompts.forEach(p => { map[p.key] = p.answers; });
+            draft.prompts.forEach((p: { key: string; answers: string[] }) => { map[p.key] = p.answers || []; });
           setAnswers(map);
         }
       } finally {
@@ -203,7 +207,7 @@ export default function StepPrompts() {
     const selectedEntries = Object.entries(answers)
       .filter(([key, arr]) => Array.isArray(arr) && arr.length > 0 && templates.find(t => t.key === key));
     const filtered = selectedEntries.map(([key, arr]) => ({ key, answers: arr }));
-    setDraft(d => ({ ...d, prompts: filtered }));
+  setDraft((d: any) => ({ ...d, prompts: filtered }));
     if (returnTo === 'hub') {
       // Guardar en draft y volver al hub
       router.replace('(tabs)/profile' as any);
@@ -241,7 +245,7 @@ export default function StepPrompts() {
             <View style={{ height: 96 }} />
             <H1 style={styles.title}>{t('complete.promptsTitleFriendly','Cuéntanos un poco sobre ti')}</H1>
             <P style={styles.subtitle}>{t('complete.promptsSubtitleFriendly','Elige cosas que te describan y con las que conectes. Tómalo con calma, es para que te conozcan mejor.')}</P>
-            <Card style={[styles.card, { marginBottom: 24 }]}>
+            <GlassCard padding={16} elevationLevel={1} style={[styles.card, { marginBottom: 24 }]}>
               <View style={styles.topMetaRow}>
                 <View style={styles.bigCounterPill}>
                   <P style={styles.bigCounterText}>{answeredQuestionsCount}/{MAX_TOTAL_CHOICES} {t('complete.promptsAnswered','respondidas')}</P>
@@ -275,7 +279,6 @@ export default function StepPrompts() {
                       choices={pr.choices}
                       selected={val}
                       maxChoices={pr.max_choices || 1}
-                      colorAccent={undefined}
                       disableNewSelection={blockNewForThisCard}
                       translateChoice={(choiceKey) => (pr as any).choicesLabels && (pr as any).choicesLabels[choiceKey] ? (pr as any).choicesLabels[choiceKey] : t(`${tKey}.answers.${choiceKey}`, choiceKey)}
                       onToggle={(choiceKey) => setAnswers(a => {
@@ -299,7 +302,7 @@ export default function StepPrompts() {
                   );
                 }}
               />
-            </Card>
+            </GlassCard>
             <View style={{ height: 32 }} />
             {isWide && (
               <View style={styles.previewPaneWrapper}>
@@ -325,7 +328,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', gap: 16 },
   title: { color: theme.colors.text, fontSize: 30, fontWeight: '800', textAlign: 'center' },
   subtitle: { color: theme.colors.subtext, fontSize: 16, textAlign: 'center', marginHorizontal: 12, marginBottom: 8 },
-  card: { width: '100%', maxWidth: 520, padding: theme.spacing(2), borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
+  card: { width: '100%', maxWidth: 520, padding: theme.spacing(2), borderRadius: 16 },
   // legacy inline prompt styles removed after integrating PromptCard
   sectionHeader: { paddingTop: 8, paddingBottom: 4 },
   sectionHeaderText: { color: theme.colors.text, fontWeight:'700', fontSize:14, letterSpacing:0.3 },

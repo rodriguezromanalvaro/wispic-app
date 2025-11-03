@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, View, StyleSheet, Image, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, BackHandler, Modal } from 'react-native';
+
+import { Alert, View, StyleSheet, Image, TouchableOpacity, KeyboardAvoidingView, ScrollView, BackHandler, Modal } from 'react-native';
+
 import { Link, useRouter } from 'expo-router';
-import { supabase } from '../../lib/supabase';
-import { Screen, Card, H1, P, TextInput, Button } from '../../components/ui';
-import { OwnerBackground } from '../../components/OwnerBackground';
-import { theme } from '../../lib/theme';
-import { CenterScaffold } from '../../components/Scaffold';
+
 import { Ionicons } from '@expo/vector-icons';
+
+import { CenterScaffold } from 'components/Scaffold';
+import { Screen, Card, H1, P, TextInput, Button } from 'components/ui';
+import { OwnerBackground } from 'features/owner/ui/OwnerBackground';
+import { supabase } from 'lib/supabase';
+import { theme } from 'lib/theme';
+
 
 const BLUE_GRADIENT: [string, string] = ['#60A5FA', '#2563EB'];
 
@@ -74,13 +79,9 @@ export default function OwnerSignUp() {
 
       if (data.session) {
         setMsg('Sesión creada');
-        await supabase.from('profiles').insert({
-          id: data.session.user.id,
-          display_name: 'Nuevo Dueño',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-        // Marcar metadata de dueño para enrutar correctamente al onboarding de dueño
+        // El perfil se crea automáticamente vía trigger en auth.users → public.profiles (create_profile_on_auth_user).
+        // Evitamos insertar directamente para no chocar con RLS o duplicados.
+        // Marcar metadata de dueño para enrutar correctamente al onboarding de dueño en próximos arranques
         try {
           await supabase.auth.updateUser({
             data: { role: 'owner', owner: true, owner_onboarded: false },
@@ -98,9 +99,9 @@ export default function OwnerSignUp() {
   return (
     <OwnerBackground>
     <Screen style={{ padding: 0, gap: 0 }}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={'padding'}>
         <CenterScaffold variant='minimal' paddedTop={60}>
-          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="always" keyboardDismissMode="none">
             <View style={styles.header}>
               <Image source={require('../../assets/adaptive-icon-foreground.png')} style={styles.logo} resizeMode="contain" />
             </View>

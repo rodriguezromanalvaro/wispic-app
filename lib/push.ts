@@ -1,5 +1,7 @@
 import { Platform } from 'react-native';
+
 import Constants from 'expo-constants';
+
 import { supabase } from './supabase';
 
 // Evita usar expo-notifications en Expo Go (SDK >=53 lo bloquea). Usaremos import dinámico.
@@ -122,10 +124,15 @@ export async function registerPushTokenForUser(userId: string) {
   const projectId = (Constants as any)?.expoConfig?.extra?.eas?.projectId
     ?? (Constants as any)?.easConfig?.projectId
     ?? undefined;
-  const tokenData = await Notifications.getExpoPushTokenAsync(
-    projectId ? { projectId } as any : undefined
-  );
-  const expoToken = tokenData.data;
+  let expoToken: string | null = null;
+  try {
+    const tokenData = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } as any : undefined
+    );
+    expoToken = tokenData.data;
+  } catch {
+    return;
+  }
 
   // 3) Canal Android
   if (Platform.OS === 'android') {
@@ -137,16 +144,22 @@ export async function registerPushTokenForUser(userId: string) {
 
   // 4) Guardar token por dispositivo en tabla dedicada (multi-dispositivo)
   // Tabla: public.push_tokens(user_id uuid, token text, platform text, updated_at timestamptz)
-  await supabase
-    .from('push_tokens')
-    .upsert({ user_id: userId, token: expoToken, platform: Platform.OS as any })
-    .throwOnError();
+  try {
+    await supabase
+      .from('push_tokens')
+      .upsert({ user_id: userId, token: expoToken!, platform: Platform.OS as any })
+      .throwOnError();
+  } catch {
+    return;
+  }
 
   // 5) Alinear experiencia: si el usuario concedió permiso y guardamos token, auto opt-in en perfil
-  await supabase
-    .from('profiles')
-    .update({ push_opt_in: true, updated_at: new Date().toISOString() })
-    .eq('id', userId);
+  try {
+    await supabase
+      .from('profiles')
+      .update({ push_opt_in: true, updated_at: new Date().toISOString() })
+      .eq('id', userId);
+  } catch {}
 }
 
 export async function clearPushToken(userId: string) {

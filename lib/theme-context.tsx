@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useMemo, ReactNode, useCallback } from 'react';
-import { theme as baseTheme } from './theme';
+import { createContext, useContext, useState, useMemo, ReactNode, useCallback, useEffect } from 'react';
+
+import { theme as baseTheme, onPaletteChange } from './theme';
 
 export type ThemeMode = 'light' | 'dark';
 
@@ -14,11 +15,20 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 export const ThemeProvider = ({ children, initialMode }: { children: ReactNode; initialMode?: ThemeMode }) => {
   const [mode, setModeState] = useState<ThemeMode>(initialMode || baseTheme.mode);
+  // Track palette changes so that memoized theme picks up palette updates (magenta/owner)
+  const [palette, setPalette] = useState<string>((baseTheme as any).currentPalette || 'magenta');
+  useEffect(() => {
+    const unsub = onPaletteChange?.((name) => setPalette(name));
+    return () => { try { unsub && (unsub as any)(); } catch {} };
+  }, []);
 
   const setMode = useCallback((m: ThemeMode) => setModeState(m), []);
   const toggleMode = useCallback(() => setModeState(m => (m === 'light' ? 'dark' : 'light')), []);
 
-  const theme = useMemo(() => ({ ...baseTheme, mode, colors: mode === 'light' ? baseTheme.lightColors : baseTheme.darkColors }), [mode]);
+  const theme = useMemo(
+    () => ({ ...baseTheme, mode, colors: mode === 'light' ? baseTheme.lightColors : baseTheme.darkColors }),
+    [mode, palette]
+  );
 
   const value = useMemo(() => ({ mode, theme, toggleMode, setMode }), [mode, theme, toggleMode, setMode]);
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

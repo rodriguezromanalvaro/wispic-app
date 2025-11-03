@@ -1,8 +1,11 @@
-import React, { memo } from 'react';
+import { memo } from 'react';
+
 import { View, StyleSheet, Pressable, Text } from 'react-native';
+
+import { theme } from 'lib/theme';
+import { typography } from 'lib/typography';
+
 import { P } from './ui';
-import { theme } from '../lib/theme';
-import { typography } from '../lib/typography';
 
 export type PromptCardProps = {
   title: string;
@@ -12,11 +15,10 @@ export type PromptCardProps = {
   maxChoices: number;
   translateChoice: (key: string) => string;
   onToggle: (choice: string) => void;
-  colorAccent?: string;
   disableNewSelection?: boolean; // bloquea nuevas selecciones cuando se alcance el máximo global
 };
 
-function PromptCardCmp({ title, icon, choices, selected, maxChoices, translateChoice, onToggle, colorAccent, disableNewSelection }: PromptCardProps) {
+function PromptCardCmp({ title, icon, choices, selected, maxChoices, translateChoice, onToggle, disableNewSelection }: PromptCardProps) {
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>

@@ -1,18 +1,30 @@
-import { View, Text, Image, ScrollView } from 'react-native';
 import React, { useEffect, useMemo, useState } from 'react';
-import { theme } from '../../lib/theme';
-import { Button, Card, Screen } from '../../components/ui';
+
+import { View, Text, Image, ScrollView, Animated } from 'react-native';
+
 import { router } from 'expo-router';
-import { supabase } from '../../lib/supabase';
-import { RequireOwnerReady } from '../../features/owner/RequireOwnerReady';
-import { useAuth } from '../../lib/useAuth';
+
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+
+import { CenterScaffold } from 'components/Scaffold';
+import { Button, Card, Screen } from 'components/ui';
+import EmptyState from 'components/EmptyState';
+import OwnerHero from 'features/owner/ui/OwnerHero';
+import { RequireOwnerReady } from 'features/owner/RequireOwnerReady';
+import { OwnerBackground } from 'features/owner/ui/OwnerBackground';
+import { OwnerHeader } from 'features/owner/ui/OwnerHeader';
+import { supabase } from 'lib/supabase';
+import { theme, applyPalette } from 'lib/theme';
+import { useAuth } from 'lib/useAuth';
+import { SegmentedControl } from 'components/design/SegmentedControl';
+
 
 async function logout() {
   try {
     await supabase.auth.signOut();
   } catch {}
   // Limpieza de flags dev ya no necesaria: owner mode se resuelve vía DB
+  applyPalette('magenta');
   router.replace('/(auth)/sign-in' as any);
 }
 
@@ -209,6 +221,20 @@ export default function OwnerHome() {
     return `${total.toFixed(2)} €`;
   }, [selectedEvent, kpis?.total]);
 
+  // Sum RSVPs 7d as a proxy for "Alcance" (actividad)
+  const reach7 = useMemo(() => (rsvps7 || []).reduce((acc, d) => acc + (d.count || 0), 0), [rsvps7?.length]);
+
+  // Metric view state
+  const [metric, setMetric] = useState<'going'|'revenue'|'reach'>('going');
+
+  // Simple mount animations for main blocks
+  const fade1 = React.useRef(new Animated.Value(0)).current;
+  const fade2 = React.useRef(new Animated.Value(0)).current;
+  const fade3 = React.useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.stagger(120, [fade1, fade2, fade3].map(v => Animated.timing(v, { toValue: 1, duration: 320, useNativeDriver: true }))).start();
+  }, []);
+
   const timeToStart = useMemo(() => {
     if (!selectedEvent?.start_at) return null;
     const now = new Date();
@@ -252,93 +278,147 @@ export default function OwnerHome() {
   }, [venueId]);
   return (
     <RequireOwnerReady>
-      <Screen style={{ backgroundColor: theme.colors.bg }}>
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
-          <Text style={{ color: theme.colors.text, fontSize: 22, fontWeight: '700' }}>Panel del dueño</Text>
-          {eventsList.length === 0 ? (
-            <Card style={{ marginTop: 12 }}>
-              <Text style={{ color: theme.colors.subtext }}>No tienes eventos publicados próximamente.</Text>
-              <View style={{ height: 12 }} />
-              <Button title="Crear evento" onPress={() => router.push('/(owner)/events' as any)} />
-            </Card>
-          ) : (
-            <>
-              {/* Selector de evento */}
-              <Card style={{ marginTop: 12 }}>
-                <Text style={{ color: theme.colors.subtext, marginBottom: 6 }}>Evento seleccionado</Text>
-                <Button
-                  title={selectedEvent ? `${selectedEvent.title} · ${new Date(selectedEvent.start_at).toLocaleString()}` : 'Elegir evento'}
-                  onPress={() => setSelectorOpen((v) => !v)}
-                  variant="outline"
+      <OwnerBackground>
+        <Screen style={{ backgroundColor: 'transparent' }}>
+          <CenterScaffold transparentBg variant="minimal">
+            <ScrollView contentContainerStyle={{ paddingTop: 8, paddingBottom: 24, gap: 12 }}>
+              <OwnerHero
+                title="Panel del dueño"
+                subtitle={eventsList.length ? 'Resumen rápido de tus eventos' : 'Publica tu primera serie y empieza a crecer'}
+                ctaLabel={eventsList.length ? undefined : 'Crear evento'}
+                onPressCta={eventsList.length ? undefined : (() => router.push('/(owner)/events' as any))}
+              />
+              {eventsList.length === 0 ? (
+                <EmptyState
+                  title="No tienes eventos publicados"
+                  subtitle="Crea tu primera serie semanal y nosotros publicamos automáticamente los próximos 7 días."
+                  iconName="calendar-outline"
+                  ctaLabel="Crear evento"
+                  onPressCta={() => router.push('/(owner)/events' as any)}
                 />
-                {selectorOpen && (
-                  <View style={{ marginTop: 10, gap: 8 }}>
-                    {eventsList.map((ev) => (
-                      <Button
-                        key={ev.id}
-                        title={`${ev.title} · ${new Date(ev.start_at).toLocaleString()}`}
-                        onPress={() => { setSelectedEventId(ev.id); setSelectorOpen(false); }}
-                        variant={ev.id === selectedEventId ? 'primary' : 'outline'}
-                        gradient={ev.id === selectedEventId}
-                      />
-                    ))}
-                  </View>
-                )}
-              </Card>
-
-              {/* Estado fijo: Apuntados (going) */}
-              <Text style={{ color: theme.colors.textDim, marginTop: 12 }}>Estás viendo: Apuntados</Text>
-
-              {/* KPIs grid */}
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 12 }}>
-                <Kpi title={'Apuntados'} value={String(kpis?.total ?? 0)} subtitle={kpis ? `+${kpis.delta24h} 24h` : '—'} />
-                <Kpi title="Recaudación" value={revenue ?? '—'} />
-                <Kpi title="Inicio" value={timeToStart ?? '—'} />
-                {/* Capacidad: si más adelante añadimos capacity en venues, lo mostramos aquí */}
-              </View>
-
-              {/* RSVPs últimos 7 días */}
-              <Card style={{ marginTop: 12 }}>
-                <Text style={{ color: theme.colors.text, fontWeight: '700', marginBottom: 8 }}>RSVPs últimos 7 días</Text>
-                <Bar7 data={rsvps7 || []} />
-              </Card>
-
-              {/* Avatares recientes */}
-              <Card style={{ marginTop: 12 }}>
-                <Text style={{ color: theme.colors.text, fontWeight: '700', marginBottom: 8 }}>Se han apuntado recientemente</Text>
-                {recentAvatars && recentAvatars.length > 0 ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: -8 }}>
-                    {recentAvatars.slice(0, 8).map((p, idx) => (
-                      <Image key={p.id}
-                        source={p.avatar_url ? { uri: p.avatar_url } : require('../../assets/adaptive-icon-foreground.png')}
-                        style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: theme.colors.bg, marginLeft: idx === 0 ? 0 : -8 }}
-                      />
-                    ))}
-                    {kpis && kpis.total > recentAvatars.length && (
-                      <Text style={{ color: theme.colors.subtext, marginLeft: 8 }}>+{kpis.total - recentAvatars.length}</Text>
+              ) : (
+                <>
+                  {/* Selector de evento */}
+                  <Animated.View style={{ opacity: fade1, transform: [{ translateY: fade1.interpolate({ inputRange: [0,1], outputRange: [8,0] }) }] }}>
+                  <Card variant="glass" gradientBorder>
+                    <Text style={{ color: theme.colors.subtext, marginBottom: 6 }}>Evento seleccionado</Text>
+                    <Button
+                      title={selectedEvent ? `${selectedEvent.title} · ${new Date(selectedEvent.start_at).toLocaleString()}` : 'Elegir evento'}
+                      onPress={() => setSelectorOpen((v) => !v)}
+                      variant="outline"
+                    />
+                    {selectorOpen && (
+                      <View style={{ marginTop: 10, gap: 8 }}>
+                        {eventsList.map((ev) => (
+                          <Button
+                            key={ev.id}
+                            title={`${ev.title} · ${new Date(ev.start_at).toLocaleString()}`}
+                            onPress={() => { setSelectedEventId(ev.id); setSelectorOpen(false); }}
+                            variant={ev.id === selectedEventId ? 'primary' : 'outline'}
+                            gradient={ev.id === selectedEventId}
+                          />
+                        ))}
+                      </View>
                     )}
-                  </View>
-                ) : (
-                  <Text style={{ color: theme.colors.subtext }}>Aún no hay asistentes recientes.</Text>
-                )}
-              </Card>
-            </>
-          )}
+                  </Card>
+                  </Animated.View>
 
-          <View style={{ marginTop: 16, width: '100%', maxWidth: 320 }}>
-            <Button title="Cerrar sesión" onPress={logout} variant="outline" gradient={false} />
-          </View>
-        </ScrollView>
-      </Screen>
+                  {/* Estado fijo: Apuntados (going) */}
+                  <View style={{ marginTop: -2 }}>
+                    <SegmentedControl
+                      segments={[
+                        { id: 'going', label: 'Apuntados' },
+                        { id: 'revenue', label: 'Ingresos' },
+                        { id: 'reach', label: 'Alcance' },
+                      ]}
+                      selectedId={metric}
+                      onChange={(id) => setMetric(id as any)}
+                    />
+                  </View>
+
+                  {/* KPIs grid */}
+                  <Animated.View style={{ opacity: fade2, transform: [{ translateY: fade2.interpolate({ inputRange: [0,1], outputRange: [8,0] }) }] }}>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+                      {metric === 'going' && (
+                        <>
+                          <StatCard label="Apuntados" value={String(kpis?.total ?? 0)} hint={kpis ? `+${kpis.delta24h} 24h` : '—'} />
+                          <StatCard label="Inicio" value={timeToStart ?? '—'} />
+                        </>
+                      )}
+                      {metric === 'revenue' && (
+                        <>
+                          <StatCard label="Recaudación" value={revenue ?? '—'} hint={kpis ? `${kpis.total} entradas` : undefined} />
+                          <StatCard label="Precio medio" value={selectedEvent?.is_free ? 'Gratis' : `${((selectedEvent?.price_cents||0)/100).toFixed(2)} €`} />
+                        </>
+                      )}
+                      {metric === 'reach' && (
+                        <>
+                          <StatCard label="Actividad 7d" value={String(reach7)} hint="RSVPs acumulados" />
+                          <StatCard label="Próximo día" value={String((rsvps7||[]).slice(-1)[0]?.count ?? 0)} hint="RSVPs hoy" />
+                        </>
+                      )}
+                    </View>
+                  </Animated.View>
+
+                  {/* RSVPs últimos 7 días */}
+                  <Animated.View style={{ opacity: fade3, transform: [{ translateY: fade3.interpolate({ inputRange: [0,1], outputRange: [8,0] }) }] }}>
+                  <Card variant="glass" gradientBorder>
+                    <Text style={{ color: theme.colors.text, fontWeight: '700', marginBottom: 8 }}>RSVPs últimos 7 días</Text>
+                    <Bar7 data={rsvps7 || []} />
+                  </Card>
+                  </Animated.View>
+
+                  {/* Avatares recientes */}
+                  <Card variant="glass" gradientBorder>
+                    <Text style={{ color: theme.colors.text, fontWeight: '700', marginBottom: 8 }}>Se han apuntado recientemente</Text>
+                    {recentAvatars && recentAvatars.length > 0 ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: -8 }}>
+                        {recentAvatars.slice(0, 8).map((p, idx) => (
+                          <Image key={p.id}
+                            source={p.avatar_url ? { uri: p.avatar_url } : require('../../assets/adaptive-icon-foreground.png')}
+                            style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: theme.colors.bg, marginLeft: idx === 0 ? 0 : -8 }}
+                          />
+                        ))}
+                        {kpis && kpis.total > recentAvatars.length && (
+                          <Text style={{ color: theme.colors.subtext, marginLeft: 8 }}>+{kpis.total - recentAvatars.length}</Text>
+                        )}
+                      </View>
+                    ) : (
+                      <Text style={{ color: theme.colors.subtext }}>Aún no hay asistentes recientes.</Text>
+                    )}
+                  </Card>
+                </>
+              )}
+
+              <View style={{ marginTop: 4, width: '100%', maxWidth: 320 }}>
+                <Button title="Cerrar sesión" onPress={logout} variant="outline" gradient={false} size="lg" style={{ width: '100%' }} />
+              </View>
+            </ScrollView>
+          </CenterScaffold>
+        </Screen>
+      </OwnerBackground>
     </RequireOwnerReady>
   );
 }
 
 const Kpi: React.FC<{ title: string; value: string; subtitle?: string }> = ({ title, value, subtitle }) => (
-  <Card style={{ flexGrow: 1, flexBasis: '47%', paddingVertical: 14 }}>
-    <Text style={{ color: theme.colors.subtext }}>{title}</Text>
-    <Text style={{ color: theme.colors.text, fontSize: 22, fontWeight: '800', marginTop: 4 }}>{value}</Text>
-    {subtitle ? <Text style={{ color: theme.colors.subtext, marginTop: 2 }}>{subtitle}</Text> : null}
+  <Card variant="glass" gradientBorder style={{ flexGrow: 1, flexBasis: '47%', paddingVertical: 12, ...theme.elevation?.[2] }}>
+    <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+      <Text style={{ color: theme.colors.subtext }}>{title}</Text>
+      {subtitle ? <Text style={{ color: theme.colors.subtext, fontSize: 11 }}>{subtitle}</Text> : null}
+    </View>
+    <Text style={{ color: theme.colors.text, fontSize: 28, fontWeight: '800', marginTop: 2 }}>{value}</Text>
+  </Card>
+);
+
+// New compact StatCard with big metric + hint
+const StatCard: React.FC<{ label: string; value: string; hint?: string }> = ({ label, value, hint }) => (
+  <Card variant="glass" gradientBorder style={{ flexGrow: 1, flexBasis: '47%', paddingVertical: 12, ...theme.elevation?.[2] }}>
+    <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+      <Text style={{ color: theme.colors.subtext }}>{label}</Text>
+      {hint ? <Text style={{ color: theme.colors.subtext, fontSize: 11 }}>{hint}</Text> : null}
+    </View>
+    <Text style={{ color: theme.colors.text, fontSize: 28, fontWeight: '800', marginTop: 2 }}>{value}</Text>
   </Card>
 );
 

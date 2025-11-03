@@ -6,7 +6,8 @@ module.exports = function(api) {
       [
         '@tamagui/babel-plugin',
         {
-          components: ['@tamagui/core', '@tamagui/stacks', '@tamagui/text', '@tamagui/button'],
+          // Use only the meta-package to avoid multiple instances
+          components: ['tamagui'],
           config: './tamagui.config.ts',
           platform: 'native',
           disableExtraction: true,

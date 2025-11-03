@@ -10,32 +10,21 @@ Legend
 ## components (UI)
 
 Safe to remove (Risk Low)
-- components/Avatar.tsx — no references found.
-- components/ProfileAchievements.tsx — no references found.
-- components/ProfileCompletion.tsx — no references found.
-- components/ProfileNotificationSettings.tsx — no references found.
-- components/ProfileNotifications.tsx — no references found.
-- components/ProfilePhotos.tsx — no references found.
-- components/ProfilePrompts.tsx — no references found.
-- components/ProfileStats.tsx — no references found.
-- components/ProfileCompletionBadge.tsx — only imported by ProfileNotifications (unused), so effectively unused.
 
-Keep (in use)
-- components/events/EventCard.tsx — used by app/(tabs)/events/index.tsx.
-- components/events/LocalCard.tsx — used by app/(tabs)/events/index.tsx.
+ components/ProfilePreviewPane.tsx — replaced by features/profile/ui/ProfilePreviewPane.tsx (removed).
 - components/GlassCard.tsx — used by features/profile/view/ProfileScreen.tsx.
 - components/OnboardingHeader.tsx — used by app/(auth)/complete/*.
-- components/OwnerBackground.tsx — used by owner auth/onboarding.
-- components/PromptCard.tsx — used by app/(auth)/complete/prompts.tsx.
-- components/SaveCongratsOverlay.tsx — used by app/(auth)/complete/bio|summary.
-- components/Scaffold.tsx — used widely in auth and tabs screens.
-- components/TopBar.tsx — used by events series page and legacy prev_events_index.tsx.
-- components/AvatarStack.tsx — used by EventCard/LocalCard.
+- components/events/EventCard.tsx — replaced by features/events/ui/EventCard.tsx; no importers remain.
+- components/events/LocalCard.tsx — replaced by features/events/ui/LocalCard.tsx; no importers remain.
+- components/events/AttendeesSheet.tsx — replaced by features/events/ui/AttendeesSheet.tsx; no importers remain.
+- components/events/EventDetailSheet.tsx — replaced by features/events/ui/EventDetailSheet.tsx; no importers remain.
 
 Further safe removals (Applied — 2025-10-25)
 - components/design/SegmentedControl.tsx and components/design/index.ts — not imported anywhere; BlendHeaderBackground remains and is imported directly.
 - components/location/CityPickerSheet.tsx — no imports left (replaced flows); only referenced in a comment.
 - components/Badge.tsx — no references found.
+ - components/Paywall.tsx — duplicate of features/premium/ui/Paywall.tsx (removed).
+ - components/PaywallModal.tsx — duplicate of features/premium/ui/PaywallModal.tsx (pending removal; no references remain).
 
 ## lib (logic/utils)
 
@@ -46,13 +35,13 @@ Safe to remove (Risk Low)
 - lib/userPrefs.ts — no references found.
 - lib/match.ts — no references found.
 - lib/paywallStore.ts — not imported anywhere (PaywallModal defines its own `openPaywall`).
-- lib/premium.ts — no references found.
-- lib/profileMappings.ts — no external references found.
+~ lib/premium.ts — moved to features/premium/model/premiumStore.ts (removed).
+- lib/profileMappings.ts — moved to features/profile/model/mappings.ts (removed).
 - lib/prompts.ts — no external references found.
 - lib/storage.ts — no external references found.
-- lib/supabase-owner.ts — no references found.
+- lib/supabase-owner.ts — replaced by features/owner/api/supabase.ts (removed).
 - lib/superlikes.ts — no references found.
-- lib/completeProfileContext.tsx — no references found.
+~ lib/completeProfileContext.tsx — moved to features/profile/model/completeProfileContext.tsx (removed from lib).
 - lib/hooks/useOwner.ts — no references found.
 
 Keep (in use)
@@ -97,7 +86,7 @@ If you approve, I can execute the deletions and push as part of this same branch
 Applied — 2025-10-25
 
 - Deleted components (Risk Low): Avatar.tsx, ProfileAchievements.tsx, ProfileCompletion.tsx, ProfileNotificationSettings.tsx, ProfileNotifications.tsx, ProfilePhotos.tsx, ProfilePrompts.tsx, ProfileStats.tsx, ProfileCompletionBadge.tsx.
-- Deleted lib (Risk Low): auth-helpers.ts, hooks/useEventDetail.ts, stores/eventSheet.ts, userPrefs.ts, match.ts, paywallStore.ts, premium.ts, profileMappings.ts, prompts.ts, storage.ts, supabase-owner.ts, superlikes.ts, completeProfileContext.tsx, hooks/useOwner.ts.
+- Deleted lib (Risk Low): auth-helpers.ts, hooks/useEventDetail.ts, stores/eventSheet.ts, userPrefs.ts, match.ts, paywallStore.ts, premium.ts, profileMappings.ts, prompts.ts, storage.ts, supabase-owner.ts, superlikes.ts, hooks/useOwner.ts.
 - Deleted features/profile UI set (Risk Med): view/ProfileScreen.tsx, components/**, components/sections/**, sheets/**.
 
 Validation after deletions: Typecheck PASS, Lint PASS, Tests PASS.

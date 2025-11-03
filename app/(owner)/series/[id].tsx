@@ -1,11 +1,18 @@
-import React from 'react';
-import { View, Text, Alert } from 'react-native';
-import { Screen, Card, Button } from '../../../components/ui';
-import { theme } from '../../../lib/theme';
+import { View, Text, ScrollView } from 'react-native';
+
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useAuth } from '../../../lib/useAuth';
-import { supabase } from '../../../lib/supabase';
+
 import { useQuery } from '@tanstack/react-query';
+
+import { CenterScaffold } from 'components/Scaffold';
+import { Screen, Card, P, StickyFooterActions } from 'components/ui';
+import { OwnerBackground } from 'features/owner/ui/OwnerBackground';
+import { OwnerHeader } from 'features/owner/ui/OwnerHeader';
+import OwnerHero from 'features/owner/ui/OwnerHero';
+import { supabase } from 'lib/supabase';
+import { theme } from 'lib/theme';
+import { useAuth } from 'lib/useAuth';
+
 
 export default function OwnerSeriesDetail(){
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -34,61 +41,63 @@ export default function OwnerSeriesDetail(){
     }
   });
 
-  const rollForward = async () => {
-    try {
-      const { error } = await supabase.rpc('roll_series_forward', { p_series_id: sid, p_horizon_weeks: 8 });
-      if (error) throw error;
-      Alert.alert('Listo', 'Generadas próximas semanas');
-      refetch();
-    } catch(e:any){ Alert.alert('Error', e.message||'No se pudo generar'); }
-  };
+  // Generación manual eliminada: ahora se rellena automáticamente ~7 días vista
 
   if (isLoading) {
     return (
-      <Screen style={{ backgroundColor: theme.colors.bg }}>
-        <Text style={{ color: theme.colors.subtext }}>Cargando…</Text>
-      </Screen>
+      <OwnerBackground>
+        <Screen style={{ backgroundColor: 'transparent' }}>
+          <CenterScaffold transparentBg variant="minimal">
+            <P dim>Cargando…</P>
+          </CenterScaffold>
+        </Screen>
+      </OwnerBackground>
     );
   }
 
   const s = data?.series;
 
   return (
-    <Screen style={{ backgroundColor: theme.colors.bg }}>
-      {!s ? (
-        <Text style={{ color: theme.colors.subtext }}>Serie no encontrada.</Text>
-      ) : (
-        <View style={{ gap: 12 }}>
-          <Card>
-            <Text style={{ color: theme.colors.text, fontWeight:'800', fontSize:18 }}>{s.title}</Text>
-            <Text style={{ color: theme.colors.subtext, marginTop:6 }}>
-              {s.active ? 'Activa' : 'Pausada'} • TZ {s.tzid}
-            </Text>
-            <Text style={{ color: theme.colors.subtext, marginTop:4 }}>
-              {s.start_date || '—'} → {s.end_date || 'sin fin'}
-            </Text>
-            <Text style={{ color: theme.colors.subtext, marginTop:4 }}>
-              Días: {(s.days_of_week||[]).join(', ')} • {s.start_time} - {s.end_time || '—'}
-            </Text>
-          </Card>
-          <Card>
-            <Text style={{ color: theme.colors.text, fontWeight:'800' }}>Próximas fechas</Text>
-            <View style={{ height: 8 }} />
-            {(data?.nexts||[]).length===0 ? (
-              <Text style={{ color: theme.colors.subtext }}>No hay próximas fechas.</Text>
-            ) : (
-              (data?.nexts||[]).map((n:any)=> (
-                <Text key={n.id} style={{ color: theme.colors.text, marginBottom: 4 }}>{new Date(n.start_at).toLocaleString()}</Text>
-              ))
-            )}
-          </Card>
-          <View style={{ flexDirection:'row', gap: 12 }}>
-            <Button title="Generar 8 semanas" onPress={rollForward} />
-            <View style={{ flex:1 }} />
-            <Button title="Volver" variant="outline" onPress={()=> router.back()} />
-          </View>
-        </View>
-      )}
-    </Screen>
+    <OwnerBackground>
+      <Screen style={{ backgroundColor: 'transparent' }}>
+        {!s ? (
+          <CenterScaffold transparentBg variant="minimal">
+            <P dim>Serie no encontrada.</P>
+          </CenterScaffold>
+        ) : (
+          <>
+          <CenterScaffold transparentBg variant="minimal">
+            <ScrollView contentContainerStyle={{ paddingTop: 8, paddingBottom: 24, gap: 12 }}>
+              <OwnerHero title={s.title} />
+              <Card variant="glass" gradientBorder>
+                <Text style={{ color: theme.colors.subtext }}>
+                  {s.active ? 'Activa' : 'Pausada'} • TZ {s.tzid}
+                </Text>
+                {/* Fechas de inicio/fin ocultas en el flujo simplificado */}
+                <Text style={{ color: theme.colors.subtext, marginTop:4 }}>
+                  Días: {(s.days_of_week||[]).join(', ')} • {s.start_time} - {s.end_time || '—'}
+                </Text>
+              </Card>
+              <Card variant="glass" gradientBorder>
+                <Text style={{ color: theme.colors.text, fontWeight:'800' }}>Próximas fechas</Text>
+                <View style={{ height: 8 }} />
+                {(data?.nexts||[]).length===0 ? (
+                  <Text style={{ color: theme.colors.subtext }}>No hay próximas fechas.</Text>
+                ) : (
+                  (data?.nexts||[]).map((n:any)=> (
+                    <Text key={n.id} style={{ color: theme.colors.text, marginBottom: 4 }}>{new Date(n.start_at).toLocaleString()}</Text>
+                  ))
+                )}
+              </Card>
+              {/* Inline back button removed; moved to sticky footer for consistent CTA placement */}
+            </ScrollView>
+          </CenterScaffold>
+          <StickyFooterActions
+            actions={[{ title: 'Volver', onPress: () => router.back(), variant: 'outline' }]}
+          />
+          </>
+        )}
+      </Screen>
+    </OwnerBackground>
   );
 }

@@ -1,10 +1,15 @@
-import React, { useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
-import { useOwner } from '../../lib/hooks/useOwner';
-import { router } from 'expo-router';
-import { theme } from '../../lib/theme';
+import { useEffect } from 'react';
+import type { ReactNode } from 'react';
 
-export const RequireOwnerReady: React.FC<{ children: any }> = ({ children }) => {
+import { View, ActivityIndicator } from 'react-native';
+
+import { router } from 'expo-router';
+
+import { useOwner } from 'lib/hooks/useOwner';
+import { theme } from 'lib/theme';
+
+type Props = { children: ReactNode };
+export const RequireOwnerReady = ({ children }: Props) => {
   const { loading, isOwner, needsOnboarding } = useOwner();
 
   useEffect(() => {

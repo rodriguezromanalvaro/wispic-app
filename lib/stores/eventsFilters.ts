@@ -1,6 +1,6 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type FilterRange = 'today' | '7' | '30' | 'all';
 export type VenueType = 'all' | 'nightclub' | 'concert_hall' | 'festival';
@@ -61,7 +61,7 @@ export const useEventsFiltersStore = create<EventsFiltersState>()(
         locationLabel: s.locationLabel,
         selectedVenueType: s.selectedVenueType,
       }),
-      migrate: (persisted, version) => {
+      migrate: (persisted, _version) => {
         // future migrations
         return persisted as any;
       },

@@ -1,15 +1,19 @@
 // app/(tabs)/_layout.tsx
-import React, { useEffect, useMemo, useState } from 'react';
-import { Tabs, usePathname, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { View, Text, Image, Pressable } from 'react-native';
-import { BlendHeaderBackground } from '../../components/design/BlendHeaderBackground';
-import { useQuery } from '@tanstack/react-query';
-import { useFocusEffect } from '@react-navigation/native';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 
-import { useThemeMode } from '../../lib/theme-context';
-import { useAuth } from '../../lib/useAuth';
-import { supabase } from '../../lib/supabase';
+import { View, Text, Image, Pressable } from 'react-native';
+
+import { Tabs, usePathname, useRouter } from 'expo-router';
+
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
+import { useQuery } from '@tanstack/react-query';
+
+import { BlendHeaderBackground } from 'components/design/BlendHeaderBackground';
+import { supabase } from 'lib/supabase';
+import { useThemeMode } from 'lib/theme-context';
+import { useAuth } from 'lib/useAuth';
+import { applyPalette } from 'lib/theme';
 
 function LogoTitle() {
   const { theme: dynTheme } = useThemeMode();
@@ -38,6 +42,9 @@ export default function TabLayout() {
   const { theme: dynTheme } = useThemeMode();
   const pathname = usePathname();
   const router = useRouter();
+  // Todo lo de usuario final (tabs) debe ser MAGENTA
+  useEffect(() => { applyPalette('magenta'); }, []);
+
   const [eventTitleCache, setEventTitleCache] = useState<Record<string,string>>({});
   const [pendingEventId, setPendingEventId] = useState<string | null>(null);
 
@@ -73,14 +80,14 @@ export default function TabLayout() {
   }, [pendingEventId]);
 
   // Determine if current path is a root tab (single segment among allowed)
-  const { headerVariant, isRootTab } = useMemo(() => {
+  const { headerVariant } = useMemo(() => {
     if (!pathname) return { headerVariant: 'brand', isRootTab: true } as const;
     const segments = pathname.split('/').filter(Boolean);
-    const ROOT_TABS = ['events','feed','chat','profile'];
+    const ROOT_TABS = ['events','feed','classic','chat','profile'];
     // Si no hay segmentos ("/"), tratar como raíz de tabs (brand)
     if (segments.length === 0) return { headerVariant: 'brand', isRootTab: true } as const;
     const isRoot = segments.length === 1 && ROOT_TABS.includes(segments[0]);
-    return { headerVariant: isRoot ? 'brand' : 'sub', isRootTab: isRoot } as const;
+    return { headerVariant: isRoot ? 'brand' : 'sub' } as const;
   }, [pathname]);
 
   // Ocultar header de Tabs dentro de /chat/[matchId] para que el hilo dibuje su propio header estable
@@ -193,7 +200,7 @@ export default function TabLayout() {
   });
 
   // 1) Refresca cuando la pestaña recupera el foco
-  useFocusEffect(React.useCallback(() => { refetch(); }, [refetch]));
+  useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
 
   // 2) Realtime: refrescar ante cambios relevantes
   useEffect(() => {
@@ -258,6 +265,17 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen
+        name="classic/index"
+        options={{
+          title: 'Clásico',
+          tabBarLabel: 'Clásico',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="flame" size={size} color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
         name="chat"
         options={{
           title: 'Chats',
@@ -293,6 +311,7 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Perfil',
+          tabBarLabel: 'Perfil',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person-circle" size={size} color={color} />
           ),

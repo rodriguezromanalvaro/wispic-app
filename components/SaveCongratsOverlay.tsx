@@ -1,8 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
+
 import { View, StyleSheet, Animated, Pressable, Dimensions } from 'react-native';
-import { H1, P, Button } from './ui';
-import { theme } from '../lib/theme';
+
 import ConfettiCannon from 'react-native-confetti-cannon';
+
+import { theme } from 'lib/theme';
+
+import { H1, P, Button } from './ui';
 
 type Props = {
   visible: boolean;

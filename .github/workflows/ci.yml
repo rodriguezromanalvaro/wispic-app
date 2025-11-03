@@ -8,10 +8,18 @@ on:
 
 jobs:
   ci:
+    permissions:
+      contents: read
+      pull-requests: read
+    concurrency:
+      group: ci-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # needed for Sentry set_commits:auto to discover commits
 
       - name: Use Node
         uses: actions/setup-node@v4
@@ -34,14 +42,41 @@ jobs:
       - name: Tests
         run: npm test -- --ci
 
+  sentry_release:
+    name: Sentry Release
+    needs: ci
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Check Sentry secrets
         id: sentry_check
         shell: bash
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         run: |
-          if [ -n "${{ secrets.SENTRY_AUTH_TOKEN }}" ] && [ -n "${{ secrets.SENTRY_ORG }}" ] && [ -n "${{ secrets.SENTRY_PROJECT }}" ]; then
+          if [ -n "$SENTRY_AUTH_TOKEN" ] && [ -n "$SENTRY_ORG" ] && [ -n "$SENTRY_PROJECT" ]; then
             echo "has_sentry=true" >> $GITHUB_OUTPUT
           else
             echo "has_sentry=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Compute deploy environment
+        id: env
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            echo "name=production" >> $GITHUB_OUTPUT
+          else
+            echo "name=preview" >> $GITHUB_OUTPUT
           fi
 
       - name: Create Sentry Release
@@ -52,7 +87,7 @@ jobs:
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         with:
-          environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }}
+          environment: ${{ steps.env.outputs.name }}
           version: ${{ github.sha }}
           finalize: true
           ignore_empty: true

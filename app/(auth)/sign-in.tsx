@@ -1,22 +1,41 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+
 import { Alert, View, StyleSheet, Image, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Modal } from 'react-native';
-import { Link, useRouter, useLocalSearchParams } from 'expo-router';
-import { supabase } from '../../lib/supabase';
-// Removemos la dependencia de los helpers
-import { Screen, Card, H1, P, TextInput, Button } from '../../components/ui';
-import { theme } from '../../lib/theme';
-import { LinearGradient } from 'expo-linear-gradient';
-import { CenterScaffold } from '../../components/Scaffold';
-import { Ionicons } from '@expo/vector-icons';
-import * as WebBrowser from 'expo-web-browser';
+
 import * as AuthSession from 'expo-auth-session';
+import * as ExpoLinking from 'expo-linking';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Link, useRouter, useLocalSearchParams } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
+import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+
+import { GlassCard } from 'components/GlassCard';
+import { CenterScaffold } from 'components/Scaffold';
+import { Screen, H1, P, TextInput, Button } from 'components/ui';
+import { supabase } from 'lib/supabase';
+// Removemos la dependencia de los helpers
+import { useThemeMode } from 'lib/theme-context';
+import { applyPalette } from 'lib/theme';
+import { getRedirectTo } from 'lib/oauthRedirect';
+import { waitForSession } from 'lib/authDebug';
+import { extractTokens } from 'lib/authUrl';
+
+
+
 
 WebBrowser.maybeCompleteAuthSession();
 
 export default function SignIn() {
+  // Eliminados logs de mount/unmount/render
   const router = useRouter();
   const { t } = useTranslation();
+  const { theme } = useThemeMode();
+  // Hard-guard: auth screen must always be MAGENTA
+  useEffect(() => { try { applyPalette('magenta'); } catch {} }, []);
   const params = useLocalSearchParams<{ email?: string | string[] }>();
   const [email, setEmail] = useState(() => (Array.isArray(params.email) ? params.email[0] : params.email) || '');
   const [password, setPassword] = useState('');
@@ -43,17 +62,71 @@ export default function SignIn() {
 
   const signInWithGoogle = async () => {
     try {
-      setMsg(t('auth.redirecting'));
-  const redirectTo = AuthSession.makeRedirectUri({ scheme: 'wispic', path: 'auth/callback' });
-      const { error } = await supabase.auth.signInWithOAuth({
+      setMsg('Abriendo Google…');
+      try { await WebBrowser.warmUpAsync(); } catch {}
+      // Construye el deep link correcto según el entorno (Expo Go, dev client o app)
+      const redirectTo = getRedirectTo();
+
+  // Evita el "flash" de la pantalla de login al volver del navegador mostrando el spinner del callback
+  try { router.push('/auth/callback'); } catch {}
+  // Asegura que no quede marcado un flujo previo de owner
+  try { await AsyncStorage.removeItem('oauth_flow'); } catch {}
+
+      // Suscripción de respaldo: si el navegador no retorna con type 'success',
+      // capturamos el deep link vía evento y hacemos el exchange igualmente.
+      let done = false;
+      const sub = ExpoLinking.addEventListener('url', async ({ url }) => {
+        if (done) return;
+        try {
+          await supabase.auth.exchangeCodeForSession(url);
+          done = true;
+          // Espera a que la sesión esté disponible para evitar que el Gate te devuelva a sign-in
+          const ok = await waitForSession();
+          if (!ok) {
+            const { access_token, refresh_token } = extractTokens(url);
+            if (access_token && refresh_token) {
+              await supabase.auth.setSession({ access_token, refresh_token });
+            }
+          }
+          router.replace('/');
+        } catch (e: any) {
+          Alert.alert('OAuth', e?.message || String(e));
+        } finally {
+          try { sub.remove(); } catch {}
+        }
+      });
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo, skipBrowserRedirect: false },
+        options: { redirectTo, skipBrowserRedirect: true },
       });
       if (error) throw error;
-      // Supabase manejará el deep link y la sesión.
+      if (data?.url) {
+        const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+        if (!done && res.type === 'success' && res.url) {
+          try {
+            await supabase.auth.exchangeCodeForSession(res.url);
+            done = true;
+            setMsg('');
+            const ok2 = await waitForSession();
+            if (!ok2) {
+              const { access_token, refresh_token } = extractTokens(res.url);
+              if (access_token && refresh_token) {
+                await supabase.auth.setSession({ access_token, refresh_token });
+              }
+            }
+            router.replace('/');
+            return;
+          } catch (e) {
+            // caerá al listener si llega por evento
+          }
+        }
+      }
+      // El deep link cerrará el browser y volverá a la app; Supabase resolverá la sesión.
     } catch (e: any) {
       setMsg('');
       Alert.alert('OAuth', e.message || '');
+    } finally {
+      try { await WebBrowser.coolDownAsync(); } catch {}
     }
   };
 
@@ -76,33 +149,7 @@ export default function SignIn() {
         return;
       }
 
-      // Verificar que el perfil exista
-      const userId = data.user?.id;
-      if (!userId) {
-        setMsg('');
-        return Alert.alert('Error', 'No se pudo obtener el ID del usuario.');
-      }
-
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (!profileData) {
-        setMsg('');
-        await supabase.from('profiles').insert({
-          id: userId,
-          display_name: 'Nuevo Usuario',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-      }
-
-      if (profileError) {
-        setMsg('');
-        return Alert.alert('Error al verificar el perfil', profileError.message);
-      }
+      // El perfil se crea automáticamente en Supabase mediante trigger; no insertamos aquí
 
       setMsg('');
       return gotoHome();
@@ -111,11 +158,21 @@ export default function SignIn() {
     }
   };
 
+  const styles = useMemo(() => makeStyles(theme), [theme]);
+
   return (
     <Screen style={{ padding: 0, gap: 0 }}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={'padding'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
         <CenterScaffold variant='auth' paddedTop={60}>
-          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            contentContainerStyle={styles.scroll}
+            keyboardShouldPersistTaps="always"
+            keyboardDismissMode="none"
+          >
         {/* Branding */}
         <View style={styles.header}>
           <Image source={require('../../assets/adaptive-icon-foreground.png')} style={styles.logo} resizeMode="contain" />
@@ -125,32 +182,37 @@ export default function SignIn() {
           <H1 style={styles.title}>{t('auth.signInTitle')}</H1>
           <P style={styles.subtitle}>{t('auth.signInSubtitle')}</P>
 
-          <Card style={styles.card}>
+          <GlassCard padding={16} elevationLevel={1} style={styles.card}
+          >
             <P style={styles.label}>{t('auth.email')}</P>
             <TextInput
+              key="email-input"
               placeholder="tu@email.com"
               value={email}
               onChangeText={(t) => { setEmail(t); if (!emailTouched) setEmailTouched(true); }}
               autoCapitalize="none"
               keyboardType="email-address"
+              debugId="signIn-email"
               style={[styles.input, emailTouched && emailError ? styles.inputError : null]}
             />
-            {emailError ? <P style={styles.errorText}>{emailError}</P> : null}
+            <P style={styles.errorText}>{emailTouched ? (emailError || ' ') : ' '}</P>
 
             <P style={styles.label}>{t('auth.passwordLabel')}</P>
             <View style={{ position: 'relative' }}>
               <TextInput
+                key="password-input"
                 placeholder="••••••••"
                 value={password}
                 onChangeText={(t) => { setPassword(t); if (!passwordTouched) setPasswordTouched(true); }}
                 secureTextEntry={!showPassword}
+                debugId="signIn-password"
                 style={[styles.input, { paddingRight: 44 }, passwordTouched && passwordError ? styles.inputError : null]}
               />
               <TouchableOpacity style={styles.eye} onPress={() => setShowPassword((s) => !s)}>
                 <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#7A8699" />
               </TouchableOpacity>
             </View>
-            {passwordError ? <P style={styles.errorText}>{passwordError}</P> : null}
+            <P style={styles.errorText}>{passwordTouched ? (passwordError || ' ') : ' '}</P>
 
             <TouchableOpacity
               onPress={async () => {
@@ -204,7 +266,7 @@ export default function SignIn() {
               {t('auth.noAccount')}<Link href="/(auth)/sign-up" style={{ color: theme.colors.primary, textDecorationLine: 'underline' }}>{t('auth.createAccount')}</Link>
             </P>
 
-            {/* Owner callout: posición original (debajo de crear cuenta), color acento propio */}
+            {/* Owner callout: acento AZUL específico para destacar flujo de locales */}
             <View style={{ height: 8 }} />
             <TouchableOpacity
               accessibilityRole="button"
@@ -213,7 +275,7 @@ export default function SignIn() {
               activeOpacity={0.92}
             >
               <LinearGradient
-                // Azul destacado, fuera de la paleta coral para diferenciar
+                // Azul suave y no invasivo
                 colors={[
                   'rgba(59,130,246,0.16)', // blue-500 @ 16%
                   'rgba(59,130,246,0.06)', // blue-500 @ 6%
@@ -233,23 +295,23 @@ export default function SignIn() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <Ionicons name="musical-notes-outline" size={20} color={'#3B82F6'} />
                   <View style={{ flex: 1 }}>
-                    <P style={{ color: theme.colors.text, fontWeight: '700', fontSize: 14 }}>¿Tienes un local?</P>
-                    <P style={{ color: theme.colors.textDim, fontSize: 12 }}>Registra tu local y publica eventos</P>
+                          <P style={{ color: theme.colors.text, fontWeight: '700', fontSize: 14 }}>¿Tienes un local?</P>
+                          <P style={{ color: theme.colors.textDim, fontSize: 12 }}>Registra tu local y publica eventos</P>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color={theme.colors.textDim} />
                 </View>
               </LinearGradient>
             </TouchableOpacity>
-          </Card>
+          </GlassCard>
         </View>
           </ScrollView>
           {/* Modal: error de autenticación */}
           <Modal visible={authErrorOpen} transparent animationType="fade" onRequestClose={() => setAuthErrorOpen(false)}>
             <View style={styles.modalOverlay}>
-              <Card style={styles.modalCard}>
+              <GlassCard padding={16} elevationLevel={2} style={styles.modalCard}>
                 <H1 style={{ textAlign: 'center', marginBottom: 6 }}>Ups…</H1>
-                <P style={{ color: theme.colors.textDim, textAlign: 'center', marginBottom: 2 }}>No hemos podido iniciar sesión con esos datos.</P>
-                <P style={{ color: theme.colors.textDim, textAlign: 'center', marginBottom: 12 }}>Revisa tu correo y contraseña o crea una cuenta nueva.</P>
+                      <P style={{ color: theme.colors.textDim, textAlign: 'center', marginBottom: 2 }}>No hemos podido iniciar sesión con esos datos.</P>
+                      <P style={{ color: theme.colors.textDim, textAlign: 'center', marginBottom: 12 }}>Revisa tu correo y contraseña o crea una cuenta nueva.</P>
                 <View style={{ gap: 10 }}>
                   <Button title={t('auth.createAccount')} onPress={() => { setAuthErrorOpen(false); goToSignUp(); }} style={styles.button} />
                   <Button title={t('auth.forgotPassword')} onPress={async () => {
@@ -273,7 +335,7 @@ export default function SignIn() {
                   }} variant="outline" />
                   <Button title={'Volver a intentarlo'} onPress={() => setAuthErrorOpen(false)} variant="outline" />
                 </View>
-              </Card>
+              </GlassCard>
             </View>
           </Modal>
         </CenterScaffold>
@@ -282,113 +344,113 @@ export default function SignIn() {
   );
 }
 
-const styles = StyleSheet.create({
-  gradient: {},
-  scroll: {
-    flexGrow: 1,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  logo: {
-    width: 112,
-    height: 112,
-    marginTop: 8,
-  },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  title: {
-    color: theme.colors.text,
-    fontSize: 26,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  subtitle: {
-    color: theme.colors.subtext,
-    fontSize: 14,
-    textAlign: 'center',
-    marginHorizontal: 12,
-    marginBottom: 4,
-  },
-  card: {
-    width: '100%',
-    maxWidth: 420,
-    padding: theme.spacing(1.5),
-    borderRadius: 14,
-    backgroundColor: theme.colors.card,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  label: {
-    color: theme.colors.textDim,
-    marginBottom: 4,
-  },
-  input: {
-    marginBottom: theme.spacing(1),
-  },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  divider: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: theme.colors.divider,
-  },
-  dividerText: {
-    color: theme.colors.textDim,
-  },
-    socialBtn: {
-      height: 44,
-      borderRadius: 10,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      borderWidth: 1,
-      borderColor: theme.colors.divider,
-    },
-  socialTextDark: {
-    color: '#111827',
-    fontWeight: '600',
-  },
-  socialTextLight: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  inputError: {
-    borderColor: '#F97066',
-    borderWidth: 1,
-  },
-  eye: {
-    position: 'absolute',
-    right: 12,
-    top: 12,
-  },
-  button: {
-    backgroundColor: theme.colors.primary,
-  },
-  message: {
-    marginTop: theme.spacing(0.5),
-    color: theme.colors.text,
-    textAlign: 'center',
-  },
-  errorText: {
-    color: '#F97066',
-    marginTop: -6,
-    marginBottom: 6,
-    fontSize: 11,
-  },
-  haveAccount: {
-    color: theme.colors.textDim,
-    textAlign: 'center',
-  },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  modalCard: { width: '100%', maxWidth: 420, padding: theme.spacing(1.5), borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
-});
+      const makeStyles = (theme: any) => StyleSheet.create({
+        gradient: {},
+        scroll: {
+          flexGrow: 1,
+        },
+        header: {
+          alignItems: 'center',
+          marginBottom: 12,
+        },
+        logo: {
+          width: 112,
+          height: 112,
+          marginTop: 8,
+        },
+        center: {
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 12,
+        },
+        title: {
+          color: theme.colors.text,
+          fontSize: 26,
+          fontWeight: '800',
+          textAlign: 'center',
+        },
+        subtitle: {
+          color: theme.colors.subtext,
+          fontSize: 14,
+          textAlign: 'center',
+          marginHorizontal: 12,
+          marginBottom: 4,
+        },
+        card: {
+          width: '100%',
+          maxWidth: 420,
+          padding: theme.spacing(1.5),
+          borderRadius: 14,
+          backgroundColor: theme.colors.card,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+        },
+        label: {
+          color: theme.colors.textDim,
+          marginBottom: 4,
+        },
+        input: {
+          marginBottom: theme.spacing(1),
+        },
+        dividerRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 6,
+        },
+        divider: {
+          flex: 1,
+          height: StyleSheet.hairlineWidth,
+          backgroundColor: theme.colors.divider,
+        },
+        dividerText: {
+          color: theme.colors.textDim,
+        },
+        socialBtn: {
+          height: 44,
+          borderRadius: 10,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6,
+          borderWidth: 1,
+          borderColor: theme.colors.divider,
+        },
+        socialTextDark: {
+          color: '#111827',
+          fontWeight: '600',
+        },
+        socialTextLight: {
+          color: '#fff',
+          fontWeight: '600',
+        },
+        inputError: {
+          borderColor: '#F97066',
+          borderWidth: 1,
+        },
+        eye: {
+          position: 'absolute',
+          right: 12,
+          top: 12,
+        },
+        button: {
+          backgroundColor: theme.colors.primary,
+        },
+        message: {
+          marginTop: theme.spacing(0.5),
+          color: theme.colors.text,
+          textAlign: 'center',
+        },
+        errorText: {
+          color: '#F97066',
+          marginTop: -6,
+          marginBottom: 6,
+          fontSize: 11,
+        },
+        haveAccount: {
+          color: theme.colors.textDim,
+          textAlign: 'center',
+        },
+        modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+        modalCard: { width: '100%', maxWidth: 420, padding: theme.spacing(1.5), borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
+      });

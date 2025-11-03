@@ -1,23 +1,32 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+
 import { KeyboardAvoidingView, Platform, StyleSheet, View, Image, TouchableOpacity, Alert, Dimensions, Modal, Pressable, InteractionManager, ActivityIndicator } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { CenterScaffold } from '../../../components/Scaffold';
-import { Screen, Card, H1, P, Button, StickyFooterActions } from '../../../components/ui';
-import { theme } from '../../../lib/theme';
-import { useCompleteProfile } from '../../../lib/completeProfileContext';
-import { useAuth } from '../../../lib/useAuth';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useTranslation } from 'react-i18next';
-import * as ImagePicker from 'expo-image-picker';
+
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { supabase } from '../../../lib/supabase';
-import { uploadUserPhotos, DEFAULT_PUBLIC_BUCKET, processPendingUploads } from '../../../lib/storage';
-// Usamos la API legacy para evitar el warning deprecado mientras migramos a la nueva File API
-import * as FileSystem from 'expo-file-system/legacy';
-// (Puede eliminarse cuando migremos todo al helper)
+import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+
 import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system/legacy';
+import { useTranslation } from 'react-i18next';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { GlassCard } from 'components/GlassCard';
+import { CenterScaffold } from 'components/Scaffold';
+import { YStack as TgYStack } from 'components/tg';
+import { Screen, H1, P, Button, StickyFooterActions } from 'components/ui';
+import { useCompleteProfile } from 'features/profile/model';
+import { OnboardingHeader } from 'features/profile/ui/OnboardingHeader';
+import { uploadUserPhotos, DEFAULT_PUBLIC_BUCKET, processPendingUploads } from 'lib/storage';
+import { supabase } from 'lib/supabase';
+import { theme } from 'lib/theme';
+import { useAuth } from 'lib/useAuth';
+
+
+// Usamos la API legacy para evitar el warning deprecado mientras migramos a la nueva File API
+// (Puede eliminarse cuando migremos todo al helper)
 
 export default function StepPhotos() {
   const router = useRouter();
@@ -74,7 +83,7 @@ export default function StepPhotos() {
 
   // Persist photos to draft.temp_photos so they survive navigation (including empty arrays)
   useEffect(() => {
-    setDraft(d => {
+    setDraft((d: any) => {
       const current = Array.isArray(d.temp_photos) ? d.temp_photos : undefined;
       const next = photos;
       const equal = Array.isArray(current)
@@ -87,13 +96,25 @@ export default function StepPhotos() {
 
   const pickFromGallery = async (maxToAdd: number = 6) => {
     try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (perm.status !== 'granted') {
-        Alert.alert('Permisos', 'Necesitamos acceso a tus fotos para continuar.');
-        return;
-      }
       const limit = Math.max(1, Math.min(6, maxToAdd));
-  const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsMultipleSelection: true, quality: 0.8, selectionLimit: limit } as any);
+      // Android modern photo picker no siempre requiere permisos; iOS sí.
+      if (Platform.OS !== 'android') {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (perm.status !== 'granted') {
+          Alert.alert('Permisos', 'Necesitamos acceso a tus fotos para continuar.');
+          return;
+        }
+      }
+      const canMulti = Platform.OS === 'ios';
+      const options: any = {
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+      };
+      if (canMulti) {
+        options.allowsMultipleSelection = true;
+        options.selectionLimit = limit;
+      }
+      const res = await ImagePicker.launchImageLibraryAsync(options);
       if (res.canceled) return;
       const uris = (res.assets || []).map(a => a.uri).filter(Boolean) as string[];
       if (!uris.length) return;
@@ -105,27 +126,13 @@ export default function StepPhotos() {
       Alert.alert('Error', e.message || 'No se pudo seleccionar la imagen');
     }
   };
-  const takePhoto = async () => {
-    try {
-      const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (perm.status !== 'granted') {
-        Alert.alert('Permisos', 'Necesitamos acceso a la cámara para continuar.');
-        return;
-      }
-      const res = await ImagePicker.launchCameraAsync({ quality: 0.8, cameraType: ImagePicker.CameraType.back } as any);
-      if (res.canceled) return;
-      const asset = res.assets?.[0];
-      if (!asset?.uri) return;
-      setPhotos((arr) => (arr.length >= 6 ? arr : [...arr, asset.uri]));
-    } catch (e: any) {
-      Alert.alert('Error', e.message || 'No se pudo tomar la foto');
-    }
-  };
   const replaceFromGallery = async (index: number) => {
     try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (perm.status !== 'granted') { Alert.alert('Permisos', 'Necesitamos acceso a tus fotos para continuar.'); return; }
-      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsMultipleSelection: false, quality: 0.8 } as any);
+      if (Platform.OS !== 'android') {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (perm.status !== 'granted') { Alert.alert('Permisos', 'Necesitamos acceso a tus fotos para continuar.'); return; }
+      }
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 } as any);
       if (res.canceled) return;
       const uri = res.assets?.[0]?.uri; if (!uri) return;
       setPhotos((arr) => arr.map((u, i) => (i === index ? uri : u)));
@@ -231,13 +238,8 @@ export default function StepPhotos() {
     <Screen style={{ padding: 0, gap: 0 }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <CenterScaffold variant='auth' paddedTop={Math.max(insets.top, 60)}>
-          <View style={[styles.progressWrap,{ top: Math.max(insets.top, 60) + 8 }] }>
-            <View style={styles.progressBg}>
-              <View style={[styles.progressFill, { width: `${(9/10)*100}%` }]} />
-            </View>
-            <P style={styles.progressText}>{t('complete.progress', { current: 9, total: 10 })}</P>
-          </View>
-          <View style={styles.center}>
+          <OnboardingHeader step={9} total={10} />
+          <TgYStack f={1} ai="center" jc="center" gap="$2">
             <View style={{ height: 56 }} />
             <H1 style={styles.title}>{t('complete.photosTitle')}</H1>
             <P style={styles.subtitle}>{t('complete.photosSubtitle')}</P>
@@ -419,7 +421,7 @@ export default function StepPhotos() {
 
             {/* Inline progress removed in favor of full-screen overlay to avoid layout shifts */}
 
-            <Card style={[styles.card, { marginTop: 12, marginBottom: 16 }]}>
+            <GlassCard padding={16} elevationLevel={1} style={[styles.card, { marginTop: 12, marginBottom: 16 }]}> 
               {/* Tips to boost profile */}
               <View style={{ gap: 6 }}>
                 <P style={{ color: theme.colors.textDim, fontWeight: '700' }}>💡 {t('complete.photosTipsTitle', 'Consejos para un gran perfil')}</P>
@@ -433,8 +435,8 @@ export default function StepPhotos() {
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, alignItems: 'center' }}>
                 {/* Deprecated inline actions moved to StickyFooterActions */}
               </View>
-            </Card>
-          </View>
+            </GlassCard>
+          </TgYStack>
           <StickyFooterActions
             actions={[
               { title: uploading ? t('complete.uploading') : t('common.continue'), onPress: async () => {
@@ -451,10 +453,10 @@ export default function StepPhotos() {
                       max: 6,
                       concurrency: 3,
                       resize: { maxWidth: 1600, maxHeight: 1600, quality: 0.8 },
-                      onProgress: ({ current, total }) => setProgress({ current, total }),
-                      onRetry: ({ attempt, maxAttempts, uri }) => {
+                      onProgress: ({ current, total }: { current: number; total: number }) => setProgress({ current, total }),
+                      onRetry: ({ attempt, maxAttempts, uri }: { attempt: number; maxAttempts: number; uri: string }) => {
                         // Podríamos opcionalmente hacer set de un mensaje en UI
-                        console.log('Retry upload', { attempt, maxAttempts, uri });
+                        // Eliminado log de reintento de subida
                       },
                     });
 
@@ -471,13 +473,13 @@ export default function StepPhotos() {
                     // 1) delete existing
                     await supabase.from('user_photos').delete().eq('user_id', user.id);
                     // 2) insert new
-                    const rows = uploadedUrls.map((url, idx) => ({ user_id: user.id, url, sort_order: idx }));
+                    const rows = uploadedUrls.map((url: string, idx: number) => ({ user_id: user.id, url, sort_order: idx }));
                     if (rows.length) {
                       const { error: insErr } = await supabase.from('user_photos').insert(rows);
                       if (insErr) throw insErr;
                     }
                     // Persist uploaded remote URLs in draft so returning to Photos shows them
-                    setDraft(d => ({ ...d, temp_photos: uploadedUrls }));
+                    setDraft((d: any) => ({ ...d, temp_photos: uploadedUrls }));
                     if (returnTo === 'hub') {
                       router.replace('(tabs)/profile' as any);
                     } else {
@@ -507,7 +509,7 @@ export default function StepPhotos() {
                 }, variant: 'outline' },
             ]}
           />
-  </CenterScaffold>
+      </CenterScaffold>
       </KeyboardAvoidingView>
       {/* Full-screen uploading overlay */}
       <Modal visible={uploading} transparent animationType="fade" onRequestClose={() => {}}>
@@ -527,14 +529,11 @@ export default function StepPhotos() {
 
 const styles = StyleSheet.create({
   gradient: { flex: 1, paddingHorizontal: 20, paddingTop: 60, paddingBottom: 24 },
-  progressWrap: { position: 'absolute', top: 16, left: 20, right: 20, gap: 6 },
-  progressBg: { width: '100%', height: 6, backgroundColor: theme.colors.surface, borderRadius: 999, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: theme.colors.primary, borderRadius: 999 },
-  progressText: { color: theme.colors.textDim, fontSize: 12 },
+  // progress handled via OnboardingHeader
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   title: { color: theme.colors.text, fontSize: 30, fontWeight: '800', textAlign: 'center' },
   subtitle: { color: theme.colors.subtext, fontSize: 16, textAlign: 'center', marginHorizontal: 12, marginBottom: 8 },
-  card: { width: '100%', maxWidth: 420, padding: theme.spacing(2), borderRadius: 16, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
+  card: { width: '100%', maxWidth: 420, padding: theme.spacing(2), borderRadius: 16 },
   gridWrap: { width: '100%', maxWidth: 420, alignSelf: 'center', flexDirection:'row', flexWrap:'wrap', gap: 8, justifyContent:'space-between', marginTop: 8 },
   grid: { flex: 1 },
   placeholder: { borderRadius: 14, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.surface },

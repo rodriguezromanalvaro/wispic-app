@@ -1,11 +1,14 @@
 import React from 'react';
+
 import { View, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import { LinearGradient } from 'expo-linear-gradient';
-import { P } from '../../../components/ui';
-import { theme } from '../../../lib/theme';
-import { OWNER_BLUE_GRADIENT } from '../../../components/OwnerBackground';
+
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { P } from 'components/ui';
+import { theme } from 'lib/theme';
 
 export const ProgressHeader: React.FC<{ step: number; total: number; style?: any }> = ({ step, total, style }) => {
   const progress = Math.max(0, Math.min(1, step / total));
@@ -15,7 +18,7 @@ export const ProgressHeader: React.FC<{ step: number; total: number; style?: any
     <View pointerEvents="none" style={[styles.wrap, { top: insets.top }, style]}>
       <View style={styles.barBg}>
         <LinearGradient
-          colors={OWNER_BLUE_GRADIENT}
+          colors={theme.gradients.brand as any}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={[styles.barFill, { width: `${progress * 100}%` }]}

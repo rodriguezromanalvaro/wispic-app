@@ -4,6 +4,7 @@
     - PowerShell: $env:CONFIRM_RESET='YES'; node scripts/reset_pg_stat_statements.js
 */
 const path = require('path');
+
 require('dotenv').config({ path: path.join(process.cwd(), '.env.local') });
 require('dotenv').config();
 const { Client } = require('pg');

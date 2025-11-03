@@ -1,11 +1,13 @@
-import { Stack } from 'expo-router';
-import { applyPalette } from '../../lib/theme';
 import { useEffect } from 'react';
+
+import { Stack } from 'expo-router';
+
+import { applyPalette } from 'lib/theme';
 
 export default function OwnerOnboardingStack() {
   useEffect(() => {
     applyPalette('owner');
-    return () => { applyPalette('coral'); };
+    return () => { applyPalette('magenta'); };
   }, []);
   return (
     <Stack screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }}>

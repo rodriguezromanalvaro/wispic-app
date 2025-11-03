@@ -1,15 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, Text, View, Pressable, Image } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
-import { supabase } from '../../../lib/supabase';
-import { useAuth } from '../../../lib/useAuth';
-import { Screen, Card } from '../../../components/ui';
-import Animated, { useAnimatedScrollHandler } from 'react-native-reanimated';
-import { CenterScaffold } from '../../../components/Scaffold';
+
+import { FlatList, Text, View, Image } from 'react-native';
+
 import { LinearGradient } from 'expo-linear-gradient';
-import { theme } from '../../../lib/theme';
+import { useRouter } from 'expo-router';
+
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
+import { useQuery } from '@tanstack/react-query';
+import Animated, { useAnimatedScrollHandler } from 'react-native-reanimated';
+
+import EmptyState from 'components/EmptyState';
+import { GlassCard } from 'components/GlassCard';
+import { CenterScaffold } from 'components/Scaffold';
+import { Screen } from 'components/ui';
+import { supabase } from 'lib/supabase';
+import { theme } from 'lib/theme';
+import { useAuth } from 'lib/useAuth';
+
 
 type MatchRow = {
   id: number;
@@ -63,7 +70,7 @@ export default function ChatList() {
     try { return new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'short', year: '2-digit' }).format(d); } catch { return d.toLocaleDateString(); }
   }
 
-  const { data, isLoading, refetch, isRefetching } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     enabled: !!user,
     queryKey: ['matches-enriched-unread', user?.id],
     queryFn: async () => {
@@ -126,7 +133,7 @@ export default function ChatList() {
       }
 
       // 3) Batch fetch mensajes recientes para contar no leídos (evita N+1)
-      const minRead = [...mapReads.values()].sort()[0] || '1970-01-01T00:00:00.000Z';
+  // Compute earliest read timestamp if needed in future
       // Traemos hasta 1000 mensajes recientes de estos matches (optimizable con RPC futura)
       const { data: recentForeign } = await supabase
         .from('messages')
@@ -275,72 +282,79 @@ export default function ChatList() {
             const slOtherText = locale === 'es' ? 'Te dio superlike' : 'Superliked you';
             const slMeText = locale === 'es' ? 'Diste superlike' : 'You superliked';
             return (
-              <Pressable onPress={() => router.push(`/(tabs)/chat/${item.id}`)}>
-                <Card style={{ flexDirection:'row', alignItems:'center', gap: theme.spacing(1) }}>
-                  <View style={{ width:44, height:44, borderRadius:22, overflow:'hidden', backgroundColor: theme.colors.card, alignItems:'center', justifyContent:'center', borderWidth:1, borderColor: theme.colors.border }}>
-                    {item.otherAvatarUrl ? (
-                      <Image source={{ uri: item.otherAvatarUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-                    ) : (
-                      <Text style={{ color: theme.colors.text, fontWeight:'800', fontSize:16 }}>
-                        {item.otherName.charAt(0).toUpperCase()}
-                      </Text>
-                    )}
-                  </View>
-                  <View style={{ flex:1 }}>
-                    <View style={{ flexDirection:'row', alignItems:'center' }}>
-                      <View style={{ flex:1, flexDirection:'row', alignItems:'center', gap:8, paddingRight:8, position:'relative' }}>
-                        <View style={{ flex:1, overflow:'hidden' }}>
-                          <Text numberOfLines={1} style={{ color: theme.colors.text, fontWeight:'800', fontSize:16 }}>
-                            {item.otherName}
-                          </Text>
-                          <LinearGradient
-                            pointerEvents="none"
-                            colors={[ 'rgba(0,0,0,0)', theme.colors.bgAlt ]}
-                            start={{ x:0, y:0 }} end={{ x:1, y:0 }}
-                            style={{ position:'absolute', right:0, top:0, bottom:0, width:22 }}
-                          />
-                        </View>
-                        {item.unreadCount > 0 && (
-                          <View style={{ minWidth:22, paddingHorizontal:6, paddingVertical:2, backgroundColor: theme.colors.primary, borderRadius:999, alignItems:'center' }}>
-                            <Text style={{ color: theme.colors.primaryText, fontWeight:'800', fontSize:11 }}>{item.unreadCount}</Text>
-                          </View>
-                        )}
-                      </View>
-                      {!!rel && (
-                        <Text style={{ color: theme.colors.subtext, fontSize:11, marginLeft:8, textAlign:'right' }} numberOfLines={1}>
-                          {rel}
+              <GlassCard interactive onPress={() => router.push(`/(tabs)/chat/${item.id}`)} padding={12} elevationLevel={1}
+                style={{ flexDirection:'row', alignItems:'center' }}>
+                <View style={{ width:44, height:44, borderRadius:22, overflow:'hidden', backgroundColor: theme.colors.card, alignItems:'center', justifyContent:'center', borderWidth: theme.mode==='dark' ? 1 : 0, borderColor: theme.colors.border }}>
+                  {item.otherAvatarUrl ? (
+                    <Image source={{ uri: item.otherAvatarUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                  ) : (
+                    <Text style={{ color: theme.colors.text, fontWeight:'800', fontSize:16 }}>
+                      {item.otherName.charAt(0).toUpperCase()}
+                    </Text>
+                  )}
+                </View>
+                <View style={{ flex:1, marginLeft: theme.spacing(1) }}>
+                  <View style={{ flexDirection:'row', alignItems:'center' }}>
+                    <View style={{ flex:1, flexDirection:'row', alignItems:'center', gap:8, paddingRight:8, position:'relative' }}>
+                      <View style={{ flex:1, overflow:'hidden' }}>
+                        <Text numberOfLines={1} style={{ color: theme.colors.text, fontWeight:'800', fontSize:16 }}>
+                          {item.otherName}
                         </Text>
+                        <LinearGradient
+                          pointerEvents="none"
+                          colors={[ 'rgba(0,0,0,0)', theme.colors.bgAlt ]}
+                          start={{ x:0, y:0 }} end={{ x:1, y:0 }}
+                          style={{ position:'absolute', right:0, top:0, bottom:0, width:22 }}
+                        />
+                      </View>
+                      {item.unreadCount > 0 && (
+                        <View style={{ minWidth:22, paddingHorizontal:6, paddingVertical:2, backgroundColor: theme.colors.primary, borderRadius:999, alignItems:'center' }}>
+                          <Text style={{ color: theme.colors.primaryText, fontWeight:'800', fontSize:11 }}>{item.unreadCount}</Text>
+                        </View>
                       )}
                     </View>
-                    {item.preview && (
-                      <Text
-                        numberOfLines={1}
-                        style={{
-                          color: item.unreadCount > 0 ? theme.colors.text : theme.colors.subtext,
-                          fontSize: 12,
-                          marginTop: 2,
-                          fontWeight: item.unreadCount > 0 ? '600' as const : '400' as const,
-                        }}
-                      >
-                        {item.preview}
+                    {!!rel && (
+                      <Text style={{ color: theme.colors.subtext, fontSize:11, marginLeft:8, textAlign:'right' }} numberOfLines={1}>
+                        {rel}
                       </Text>
                     )}
-                    {(starFromOther || starFromMe) && (
-                      <View style={{ flexDirection:'row', justifyContent:'flex-end', gap:8, marginTop: 4 }}>
-                        {starFromOther && (
-                          <Text style={{ color:'#F59E0B', fontWeight:'900', fontSize:12 }}>{slOtherText}</Text>
-                        )}
-                        {starFromMe && (
-                          <Text style={{ color: theme.colors.primary, fontWeight:'900', fontSize:12 }}>{slMeText}</Text>
-                        )}
-                      </View>
-                    )}
                   </View>
-                </Card>
-              </Pressable>
+                  {item.preview && (
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        color: item.unreadCount > 0 ? theme.colors.text : theme.colors.subtext,
+                        fontSize: 12,
+                        marginTop: 2,
+                        fontWeight: item.unreadCount > 0 ? '600' as const : '400' as const,
+                      }}
+                    >
+                      {item.preview}
+                    </Text>
+                  )}
+                  {(starFromOther || starFromMe) && (
+                    <View style={{ flexDirection:'row', justifyContent:'flex-end', gap:8, marginTop: 4 }}>
+                      {starFromOther && (
+                        <Text style={{ color:'#F59E0B', fontWeight:'900', fontSize:12 }}>{slOtherText}</Text>
+                      )}
+                      {starFromMe && (
+                        <Text style={{ color: theme.colors.primary, fontWeight:'900', fontSize:12 }}>{slMeText}</Text>
+                      )}
+                    </View>
+                  )}
+                </View>
+              </GlassCard>
             );
           }}
-          ListEmptyComponent={<Card><Text style={{ color: theme.colors.text }}>{T.empty}</Text></Card>}
+          ListEmptyComponent={
+            <EmptyState
+              title={T.empty}
+              subtitle={locale === 'es' ? 'Cuando hagas match, verás tus conversaciones aquí.' : 'After you match, your conversations will appear here.'}
+              ctaLabel={locale === 'es' ? 'Descubrir personas' : 'Discover people'}
+              onPressCta={() => router.push('/(tabs)/classic')}
+              iconName="chatbubbles-outline"
+            />
+          }
         />
       </CenterScaffold>
     </Screen>

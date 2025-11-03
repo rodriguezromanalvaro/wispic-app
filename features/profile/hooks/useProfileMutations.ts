@@ -1,11 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '../../../lib/supabase';
-import { uploadSinglePhoto } from '../../../lib/storage';
-import * as FileSystem from 'expo-file-system';
-import { decode as decodeBase64 } from 'base64-arraybuffer';
-import { useToast } from '../../../lib/toast';
 
-interface UpdateBasicsInput { display_name?: string; bio?: string; interested_in?: string[]; seeking?: string[]; gender?: string|null; city?: string | null }
+import { uploadSinglePhoto } from 'lib/storage';
+import { supabase } from 'lib/supabase';
+import { useToast } from 'lib/toast';
+
+interface UpdateBasicsInput { display_name?: string; bio?: string; interested_in?: string[]; seeking?: string[]; gender?: string|null; city?: string | null; city_id?: number | null }
+interface UpdateDiscoveryInput { max_distance_km?: number }
 interface UpdateVisibilityInput { show_gender?: boolean; show_orientation?: boolean; show_seeking?: boolean; }
 interface UpdateNotificationsInput { push_opt_in?: boolean; notify_messages?: boolean; notify_likes?: boolean; notify_friend_requests?: boolean }
 interface UpsertPromptInput { id?: number|string; prompt_id: number; response: string | string[]; }
@@ -33,6 +33,7 @@ export function useProfileMutations(profileId?: string) {
             seeking: input.seeking ?? prev.seeking,
             gender: input.gender !== undefined ? input.gender : prev.gender,
             city: input.city !== undefined ? input.city : (prev as any).city,
+            city_id: (input as any).city_id !== undefined ? (input as any).city_id : (prev as any).city_id,
         });
       }
       return { prev };
@@ -48,7 +49,7 @@ export function useProfileMutations(profileId?: string) {
       if (vars && 'seeking' in vars) msgs.push('Busco actualizado');
       if (vars && 'display_name' in vars) msgs.push('Nombre actualizado');
       if (vars && 'bio' in vars) msgs.push('Bio actualizada');
-      if (vars && 'city' in vars) msgs.push('Ubicación actualizada');
+      if (vars && ('city' in vars || 'city_id' in vars)) msgs.push('Ubicación actualizada');
       toast.show(msgs.length ? msgs.join(' · ') : 'Perfil actualizado', 'success');
     },
     onSettled: () => {
@@ -123,17 +124,39 @@ export function useProfileMutations(profileId?: string) {
     }
   });
 
+  const updateDiscovery = useMutation({
+    mutationFn: async (input: UpdateDiscoveryInput) => {
+      if (!profileId) throw new Error('No profile id');
+      const { error } = await supabase.from('profiles').update(input).eq('id', profileId);
+      if (error) throw error;
+    },
+    onMutate: async (input) => {
+      await qc.cancelQueries({ queryKey: ['profile:full', profileId] });
+      const prev = qc.getQueryData<any>(['profile:full', profileId]);
+      if (prev) {
+        qc.setQueryData(['profile:full', profileId], {
+          ...prev,
+          max_distance_km: input.max_distance_km ?? prev.max_distance_km,
+        });
+      }
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => { if (ctx?.prev) qc.setQueryData(['profile:full', profileId], ctx.prev); },
+    onSuccess: (_d, vars) => {
+      const parts: string[] = [];
+      if (vars.max_distance_km !== undefined) parts.push(`Distancia máx. ${vars.max_distance_km} km`);
+      toast.show(parts.length ? parts.join(' · ') : 'Preferencias actualizadas', 'success');
+    },
+    onSettled: () => { qc.invalidateQueries({ queryKey: ['profile:full', profileId] }); }
+  });
+
   // Prompts upsert
   const upsertPrompt = useMutation({
     mutationFn: async (input: UpsertPromptInput) => {
       if (!profileId) throw new Error('No profile id');
       // If id not provided, still attempt to find existing row to avoid duplicate insert race
-      let workingId = input.id;
-      if (!workingId) {
-        const cached: any = supabase; // placeholder to satisfy linter (not actually used)
-        // Try to read from query cache directly
-        // (We don't have direct access to qc here easily without coupling; rely on DB upsert instead)
-      }
+  // workingId not needed; upsert handles create-or-update
+      // If id is not provided, rely on upsert with onConflict to handle create-or-update without fetching first
   // Normalize arrays (store raw array; Supabase will map to jsonb / text[] depending on schema)
   // Detect if response is array; some schemas might still have 'answer' as text instead of json/array.
   const answerValue = Array.isArray(input.response) ? (input.response as string[]) : input.response;
@@ -193,35 +216,7 @@ export function useProfileMutations(profileId?: string) {
     onSettled: () => { qc.invalidateQueries({ queryKey: ['profile:full', profileId] }); }
   });
 
-  // Photos: add single photo (append at end). Accepts a local file uri (already picked & optionally cropped)
-  async function uriToBlob(localUri: string, mime?: string): Promise<Blob> {
-    // Handle content:// URIs by copying to cache (Android)
-    let workingUri = localUri;
-    try {
-      if (workingUri.startsWith('content://')) {
-        const baseDir = (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory || '';
-        const dest = baseDir + 'upl-' + Date.now() + '.jpg';
-        await FileSystem.copyAsync({ from: workingUri, to: dest });
-        workingUri = dest;
-      }
-      // First attempt: fetch
-      const res = await fetch(workingUri);
-      const b = await res.blob();
-      if (b.size === 0) throw new Error('Empty blob');
-      return b;
-    } catch(err) {
-      console.warn('[uriToBlob] fetch fallback', err);
-      try {
-        const path = workingUri.replace('file://','');
-        const b64 = await FileSystem.readAsStringAsync(path, { encoding: 'base64' as any });
-        const arrayBuffer = decodeBase64(b64);
-        return new Blob([arrayBuffer], { type: mime || 'image/jpeg' });
-      } catch(e2) {
-        console.warn('[uriToBlob] base64 fallback failed', e2);
-        throw e2;
-      }
-    }
-  }
+  // (removed unused uriToBlob helper; uploadSinglePhoto handles conversions internally)
 
   const addPhoto = useMutation({
     mutationFn: async (input: { fileUri: string; mimeType?: string }) => {
@@ -339,5 +334,5 @@ export function useProfileMutations(profileId?: string) {
     onSettled: ()=> { qc.invalidateQueries({ queryKey: ['profile:full', profileId] }); }
   });
 
-  return { updateBasics, updateVisibility, updateNotifications, upsertPrompt, deletePrompt, addPhoto, removePhoto, replacePhoto, reorderPhotos };
+  return { updateBasics, updateVisibility, updateNotifications, updateDiscovery, upsertPrompt, deletePrompt, addPhoto, removePhoto, replacePhoto, reorderPhotos };
 }
