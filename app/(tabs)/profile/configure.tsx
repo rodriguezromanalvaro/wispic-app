@@ -18,6 +18,9 @@ import { registerPushTokenForUser, clearPushToken } from 'lib/push';
 import { scheduleLocalTestNotification, registerForPushNotificationsAsync } from 'lib/notifications';
 import { theme } from 'lib/theme';
 import { useAuth } from 'lib/useAuth';
+import { SUPPORT_EMAIL, PRIVACY_URL, TERMS_URL, APP_NAME } from 'lib/brand';
+import { openExternal } from 'lib/links';
+import { useToast } from 'lib/toast';
 
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
@@ -52,6 +55,7 @@ export default function ConfigureProfileList() {
   const insets = useSafeAreaInsets();
   const { data } = useProfile();
   const mutations = useProfileMutations(data?.id);
+  const toast = useToast();
   // const [showCityPicker, setShowCityPicker] = useState(false);
   const [pendingPush, setPendingPush] = useState(false);
   const [showingToken, setShowingToken] = useState<string | null>(null);
@@ -84,6 +88,25 @@ export default function ConfigureProfileList() {
     const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
     return () => sub.remove();
   }, [router]);
+
+  const openUrl = async (url: string) => {
+    try {
+      await openExternal(url);
+    } catch (e) {
+      toast.show(t('common.error','Ha ocurrido un error'), 'error');
+    }
+  };
+
+  const contactSupport = async () => {
+    const subject = encodeURIComponent(`[${APP_NAME}] ${t('support.subject','Soporte')}`);
+    const body = encodeURIComponent(
+      `${t('support.preBody','Cuéntanos qué ha pasado o en qué podemos ayudarte.')}` +
+      `\n\n${t('support.meta','Información adicional (opcional):')}` +
+      `\n- userId: ${data?.id ?? 'n/a'}`
+    );
+    const mailto = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
+    await openUrl(mailto);
+  };
 
   return (
     <Screen style={{ padding: 0 }} edges={[]}> 
@@ -263,6 +286,26 @@ export default function ConfigureProfileList() {
             )}
           </View>
         </Card>
+
+        {/* Ayuda y Legal */}
+        <SectionHeader title={t('support.helpTitle','Ayuda y legal')} />
+        <View style={styles.cardList}>
+          <Row
+            icon={<Ionicons name="help-circle-outline" size={20} color={theme.colors.text} />}
+            label={t('support.contact','Ayuda y soporte')}
+            onPress={contactSupport}
+          />
+          <Row
+            icon={<Ionicons name="document-text-outline" size={20} color={theme.colors.text} />}
+            label={t('legal.privacy','Política de privacidad')}
+            onPress={() => openUrl(PRIVACY_URL)}
+          />
+          <Row
+            icon={<Ionicons name="document-lock-outline" size={20} color={theme.colors.text} />}
+            label={t('legal.terms','Términos y condiciones')}
+            onPress={() => openUrl(TERMS_URL)}
+          />
+        </View>
 
       </ScrollView>
 

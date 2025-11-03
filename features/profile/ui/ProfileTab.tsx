@@ -141,23 +141,7 @@ export default function ProfileTab() {
               />
             </View>
 
-            <View style={[styles.card, { width:'100%', maxWidth: 520, marginTop: 4 }]}> 
-              <Text style={styles.cardTitle}>{t('support.helpTitle','Ayuda y legal')}</Text>
-              <View style={styles.linkList}>
-                <TouchableOpacity onPress={contactSupport} style={styles.linkRow}>
-                  <Ionicons name="help-circle" size={18} color={theme.colors.text} />
-                  <Text style={styles.linkText}>{t('support.contact','Ayuda y soporte')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => openUrl(PRIVACY_URL)} style={styles.linkRow}>
-                  <Ionicons name="document-text" size={18} color={theme.colors.text} />
-                  <Text style={styles.linkText}>{t('legal.privacy','Política de privacidad')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => openUrl(TERMS_URL)} style={styles.linkRow}>
-                  <Ionicons name="document-lock" size={18} color={theme.colors.text} />
-                  <Text style={styles.linkText}>{t('legal.terms','Términos y condiciones')}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+            {/* Ayuda y legal movido a la pantalla de Configurar perfil */}
           </YStack>
         </ScrollView>
         <Modal visible={showPremium} transparent animationType="fade" onRequestClose={()=> setShowPremium(false)}>
