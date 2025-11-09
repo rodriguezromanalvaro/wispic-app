@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback, useRef, useMemo, memo } from 'react';
 
 import { View, Text, Dimensions, Image, ActivityIndicator, Alert, Pressable } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { PanGestureHandler } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, runOnJS, cancelAnimation } from 'react-native-reanimated';
 
@@ -13,28 +14,39 @@ import EmptyState from 'components/EmptyState';
 import { YStack } from 'components/tg';
 import { Screen } from 'components/ui';
 import { SwipeButtons } from 'features/profile/ui/swipe/SwipeButtons';
+import { SWIPE } from 'features/swipe/constants';
+
+// lib imports alphabetized
+import { truncateByGraphemes } from 'lib/graphemes';
+import { i18n } from 'lib/i18n';
 import { ensureMatchConsistency } from 'lib/match';
-import { supabase } from 'lib/supabase';
+import { ensurePresence, useOnlineIds } from 'lib/presence';
+import { getLocaleChain, pickFirstNonEmptyTitle, mergeChoiceLabels } from 'lib/promptLocale';
 import { remainingSuperlikes, incSuperlike } from 'lib/superlikes';
+import { supabase } from 'lib/supabase';
 import { theme } from 'lib/theme';
+import { formatDistanceKm } from 'lib/ui/formatDistance';
+import { prefixIcon } from 'lib/ui/prefixIcon';
 import { useAuth } from 'lib/useAuth';
 
-interface ProfileRow { id: string; display_name: string | null; calculated_age?: number | null; gender?: string | null; interests?: string[] | null; avatar_url?: string | null; interested_in?: string[] | null; seeking?: string[] | null }
+interface ProfileRow { id: string; display_name: string | null; bio?: string | null; calculated_age?: number | null; gender?: string | null; interests?: string[] | null; avatar_url?: string | null; interested_in?: string[] | null; seeking?: string[] | null }
 type CardProfile = {
   id: string;
   name: string;
   age: number | null;
+  bio?: string | null;
   interests: string[];
   avatar: string | null;
   gender: string | null;
   interested_in: string[];
   seeking: string[];
   photos: { id: number; url: string; sort_order: number }[];
-  prompts?: { id: number; prompt_id: number; question?: string; response: any; key?: string; choices_labels?: Record<string,string>|null }[];
+  prompts?: { id: number; prompt_id: number; question?: string; response: any; key?: string; choices_labels?: Record<string,string>|null; icon?: string | null }[];
+  distanceKm?: number | null;
 };
 
 const { width, height } = Dimensions.get('window');
-const CARD_WIDTH = width * 0.9;
+const CARD_WIDTH = width;
 const HEADER_SPACER = 8;
 const ACTION_BAR_SPACER = 150;
 const RAW_CARD_HEIGHT = height * 0.72;
@@ -42,20 +54,41 @@ const EXTRA_TOP_OFFSET = 0;
 const CARD_TOP_PADDING = HEADER_SPACER + 10 + EXTRA_TOP_OFFSET;
 const CARD_BOTTOM_PADDING = ACTION_BAR_SPACER;
 const AVAILABLE_HEIGHT = height - CARD_TOP_PADDING - CARD_BOTTOM_PADDING;
-let CARD_HEIGHT = Math.min(RAW_CARD_HEIGHT, AVAILABLE_HEIGHT - 8);
-if (CARD_HEIGHT < 320) CARD_HEIGHT = Math.min(AVAILABLE_HEIGHT - 4, 320);
-const INFO_OVERLAY_RAISE = 110;
-const SWIPE_THRESHOLD_X = 110;
-const SWIPE_THRESHOLD_Y = 120;
-const AUTO_ADVANCE = true;
-const AUTO_ADVANCE_INTERVAL_MS = 4000;
-const EDGE_ZONE_RATIO = 0.28;
-const PHOTO_SWIPE_DISTANCE = 60;
-const PROMOTE_DISTANCE = SWIPE_THRESHOLD_X * 0.52;
-const SUPERLIKE_ACTIVATION_Y = 40;
-const SUPERLIKE_PARTICLES = 10;
-const PARALLAX_FACTOR = -0.08;
+let CARD_HEIGHT = AVAILABLE_HEIGHT;
+const INFO_OVERLAY_RAISE = SWIPE.INFO_OVERLAY_RAISE;
+const SWIPE_THRESHOLD_X = SWIPE.SWIPE_THRESHOLD_X;
+const SWIPE_THRESHOLD_Y = SWIPE.SWIPE_THRESHOLD_Y;
+const AUTO_ADVANCE = SWIPE.AUTO_ADVANCE;
+const AUTO_ADVANCE_INTERVAL_MS = SWIPE.AUTO_ADVANCE_INTERVAL_MS;
+const EDGE_ZONE_RATIO = SWIPE.CARD_EDGE_ZONE_RATIO;
+const PHOTO_SWIPE_DISTANCE = SWIPE.PHOTO_SWIPE_DISTANCE;
+const PROMOTE_DISTANCE = SWIPE.SWIPE_THRESHOLD_X * 0.52;
+const SUPERLIKE_ACTIVATION_Y = SWIPE.SUPERLIKE_ACTIVATION_Y;
+const SUPERLIKE_PARTICLES = SWIPE.SUPERLIKE_PARTICLES;
+const PARALLAX_FACTOR = SWIPE.PARALLAX_FACTOR;
 const TUTORIAL_ACTIONS_AUTO_DISMISS = 3;
+// Minimal outer inset so the card doesn't touch screen edges
+const OUTER_INSET = 6;
+
+// Small helper to build rgba from hex (for subtle primary background in common chips)
+const colorWithAlpha = (hex: string, alpha: number) => {
+  if (!hex) return `rgba(0,0,0,${alpha})`;
+  let h = hex.trim();
+  if (h.startsWith('#')) h = h.slice(1);
+  if (h.length === 3) {
+    const r = parseInt(h[0] + h[0], 16);
+    const g = parseInt(h[1] + h[1], 16);
+    const b = parseInt(h[2] + h[2], 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+  if (h.length >= 6) {
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+  return `rgba(0,0,0,${alpha})`;
+};
 
 const PhotoProgressSegment = memo(function PhotoProgressSegment({
   idx,
@@ -90,30 +123,70 @@ export default function EventSwipeScreen() {
   const qc = useQueryClient();
   const router = useRouter();
 
+  // Start realtime presence for current user (once per mount)
+  useEffect(() => { if (user?.id) ensurePresence(user.id) }, [user?.id]);
+
   const { data: remaining = 0, refetch: refetchRemaining } = useQuery({
     enabled: !!user,
     queryKey: ['superlikes-remaining-simple', user?.id],
     queryFn: async () => remainingSuperlikes(user!.id, 3)
   });
 
-  interface SwipeQueryResult { profiles: CardProfile[]; boostSet: Set<string>; myInterests: string[] }
-  const { data, isLoading, refetch } = useQuery<SwipeQueryResult>({
+  const PAGE_SIZE = 50;
+  interface SwipePage { profiles: CardProfile[]; boostSet: Set<string>; myInterests: string[]; usedRpc: boolean }
+  const { data, isLoading, fetchNextPage, hasNextPage, refetch } = useInfiniteQuery<SwipePage>({
     enabled: !!user,
     queryKey: ['event-swipe-profiles', eid, user?.id],
-    queryFn: async (): Promise<SwipeQueryResult> => {
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, pages, lastOffset) => {
+      return lastPage?.profiles?.length === PAGE_SIZE ? (Number(lastOffset) + PAGE_SIZE) : undefined;
+    },
+    queryFn: async ({ pageParam }): Promise<SwipePage> => {
       if (Number.isNaN(eid)) {
         console.warn('[event-swipe] eid es NaN');
-        return { profiles: [], boostSet: new Set<string>(), myInterests: [] } as SwipeQueryResult;
+  return { profiles: [], boostSet: new Set<string>(), myInterests: [], usedRpc: false } as SwipePage;
       }
+      const offset = typeof pageParam === 'number' ? pageParam : 0;
 
-      const { data: att, error: attErr } = await supabase
-        .from('event_attendance')
-        .select('user_id')
-        .eq('event_id', eid)
-        .eq('status', 'going');
-      if (attErr) console.warn('[event-swipe] attendance error', attErr.message);
-      const ids = (att || []).map(a => a.user_id).filter(id => id !== user!.id);
-      if (!ids.length) return { profiles: [] as CardProfile[], boostSet: new Set<string>(), myInterests: [] } as SwipeQueryResult;
+      // Prefer server-side filtered candidates via RPC (mutual age + mutual interests + exclusions)
+      const { data: rpcRows, error: rpcErr } = await supabase
+  // Usamos versión enriquecida con fotos; si falla se hará fallback más abajo
+  .rpc('event_candidates_cards_with_photos', { p_user_id: user!.id, p_event_id: eid, p_limit: PAGE_SIZE, p_offset: offset });
+  if (rpcErr) console.warn('[event-swipe] rpc event_candidates_cards error', rpcErr.message);
+
+      // Build profilesSource from RPC if available; else fallback to previous IDs-from-attendance path
+      let profilesSource: ProfileRow[] = [];
+      let usedRpc = false;
+      if (Array.isArray(rpcRows) && rpcRows.length > 0) {
+        usedRpc = true;
+        profilesSource = (rpcRows as any[]).map((r: any) => ({
+          id: r.candidate_id,
+          display_name: r.display_name ?? 'Usuario',
+          calculated_age: typeof r.calculated_age === 'number' ? r.calculated_age : null,
+          gender: null, // no lo pedimos en RPC para ahorrar, se mantiene null
+          interests: null, // se llenará con profile_interests más abajo
+          avatar_url: r.avatar_url || null, // usar avatar_url de la RPC cuando esté disponible
+          interested_in: null, // no lo necesitamos aquí; mutualidad ya la aplicó el servidor
+          seeking: Array.isArray(r.seeking) ? r.seeking : null,
+        }));
+      } else {
+        // Fallback: obtener IDs desde asistencia y luego perfilar
+        const { data: att, error: attErr } = await supabase
+          .from('event_attendance')
+          .select('user_id')
+          .eq('event_id', eid)
+          .eq('status', 'going');
+        if (attErr) console.warn('[event-swipe] attendance error', attErr.message);
+        const ids = (att || []).map(a => a.user_id).filter(id => id !== user!.id);
+  if (!ids.length) return { profiles: [] as CardProfile[], boostSet: new Set<string>(), myInterests: [], usedRpc: false } as SwipePage;
+        const { data: profsIn, error: profsInErr } = await supabase
+          .from('profiles')
+          .select('id, display_name, calculated_age, gender, avatar_url, interested_in, seeking')
+          .in('id', ids);
+        if (profsInErr) console.warn('[event-swipe] profiles .in error', profsInErr.message, { ids });
+        profilesSource = (profsIn || []) as ProfileRow[];
+      }
+  if (!profilesSource.length) return { profiles: [] as CardProfile[], boostSet: new Set<string>(), myInterests: [], usedRpc } as SwipePage;
 
       const normalizeLabel = (raw?: string | null): string | null => {
         if (!raw) return null;
@@ -129,15 +202,20 @@ export default function EventSwipeScreen() {
         return Array.from(new Set(arr.map(a => normalizeLabel(a)).filter(Boolean) as string[]));
       };
 
-      const { data: profsIn, error: profsInErr } = await supabase
-        .from('profiles')
-        .select('id, display_name, calculated_age, gender, avatar_url, interested_in, seeking')
-        .in('id', ids);
-      if (profsInErr) console.warn('[event-swipe] profiles .in error', profsInErr.message, { ids });
-      let profilesSource: ProfileRow[] = profsIn || [];
-      if (!profsInErr && profilesSource.length === 0 && ids.length > 0) {
+      // Si perfilesSource aún está vacío (caso raro), intentamos aún el fallback por ID individual
+      if (profilesSource.length === 0) {
         const fallback: ProfileRow[] = [];
-        for (const id of ids) {
+        // En este punto no tenemos 'ids' directo; lo inferimos de otras cargas si existieran
+        const candidateIds: string[] = [];
+        try {
+          const { data: rawAtt } = await supabase
+            .from('event_attendance')
+            .select('user_id')
+            .eq('event_id', eid)
+            .eq('status', 'going');
+          (rawAtt || []).forEach((a: any) => { if (a?.user_id && a.user_id !== user!.id) candidateIds.push(a.user_id); });
+        } catch {}
+        for (const id of candidateIds) {
           const { data: one, error: oneErr } = await supabase
             .from('profiles')
             .select('id, display_name, calculated_age, gender, avatar_url, interested_in, seeking')
@@ -154,77 +232,60 @@ export default function EventSwipeScreen() {
 
       let interestsMap = new Map<string, string[]>();
       let photosMap = new Map<string, { id: number; url: string; sort_order: number }[]>();
-      if (profilesSource.length) {
-        const { data: photosRows, error: photosErr } = await supabase
-          .from('user_photos')
-          .select('id, user_id, url, sort_order')
-          .in('user_id', profilesSource.map(p => p.id));
-        if (photosErr) console.warn('[event-swipe] photos error', photosErr.message);
-        (photosRows || []).forEach((r: any) => {
-          if (!r.user_id) return;
-          const arr = photosMap.get(r.user_id) || [];
-          arr.push({ id: r.id, url: r.url, sort_order: r.sort_order ?? 0 });
-          photosMap.set(r.user_id, arr);
+      if (profilesSource.length && usedRpc && Array.isArray(rpcRows)) {
+        // Fotos embebidas en event_candidates_cards_with_photos → sin bulk
+        (rpcRows as any[]).forEach((r: any) => {
+          const pid = r?.candidate_id;
+          const arr = Array.isArray(r?.photos) ? r.photos : [];
+          photosMap.set(pid, arr.map((x: any) => ({ id: Number(x.id), url: String(x.url), sort_order: Number(x.sort_order ?? 0) })));
         });
-        photosMap.forEach((arr, k) => photosMap.set(k, arr.sort((a,b)=> (a.sort_order??0)-(b.sort_order??0))));
       }
-      let promptsMap = new Map<string, { id: number; prompt_id: number; question?: string; response: any; key?: string; choices_labels?: Record<string,string>|null }[]>();
+      // Prompts via SECURITY DEFINER RPC (localized choices labels). Include icon when available.
+      let promptsMap = new Map<string, { id: number; prompt_id: number; question?: string; response: any; key?: string; choices_labels?: Record<string,string>|null; icon?: string|null }[]>();
       if (profilesSource.length) {
-        const { data: promptsRows, error: promErr } = await supabase
-          .from('profile_prompts')
-          .select('id, prompt_id, answer, profile_id, profile_prompt_templates(question, key, profile_prompt_template_locales(locale,title,choices_labels))')
-          .in('profile_id', profilesSource.map(p => p.id));
-        if (promErr) console.warn('[event-swipe] prompts error', promErr.message);
-        function parseArrayLike(val: any): any {
-          if (Array.isArray(val)) return val;
-          if (typeof val === 'string') {
-            const s = val.trim();
-            if (s.startsWith('[') && s.endsWith(']')) { try { const parsed = JSON.parse(s); if (Array.isArray(parsed)) return parsed; } catch {} }
-            if (s.startsWith('{') && s.endsWith('}')) {
-              const inner = s.slice(1, -1);
-              if (!inner) return [];
-              const parts = inner.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(p => p.trim().replace(/^"|"$/g,''));
-              return parts.filter(p => p.length > 0);
-            }
-          }
-          return val;
+        try {
+          const idsAll = profilesSource.map(p => p.id);
+          const { data: promptRows } = await supabase
+            .rpc('profile_prompts_bulk', { p_ids: idsAll, p_locale: i18n.language || 'es' });
+          (promptRows || []).forEach((r: any) => {
+            if (!r?.profile_id) return;
+            const arr = promptsMap.get(r.profile_id) || [];
+            // Incluir icon y question cuando el RPC los provea
+            arr.push({ id: r.prompt_id, prompt_id: r.prompt_id, key: r.key, question: r.question || null, response: r.answer, choices_labels: r.choices_labels || null, icon: r.icon || null });
+            promptsMap.set(r.profile_id, arr);
+          });
+          promptsMap.forEach((arr, k) => promptsMap.set(k, arr.sort((a,b)=> a.prompt_id - b.prompt_id)));
+        } catch (e:any) {
+          console.warn('[event-swipe] prompts rpc error', e?.message);
         }
-        (promptsRows || []).forEach((r: any) => {
-          const arr = promptsMap.get(r.profile_id) || [];
-          let resp = r.answer ?? '';
-          resp = parseArrayLike(resp);
-          let localizedQ: string | undefined = undefined;
-          let choicesLabels: Record<string,string>|null = null;
-          const locales = r.profile_prompt_templates?.profile_prompt_template_locales;
-          if (Array.isArray(locales)) {
-            const es = locales.find((l: any) => l?.locale === 'es');
-            if (es?.title) localizedQ = es.title;
-            if (es?.choices_labels && typeof es.choices_labels === 'object') choicesLabels = es.choices_labels;
-            if (!localizedQ) {
-              const en = locales.find((l:any)=> l?.locale==='en' && l.title);
-              if (en?.title) localizedQ = en.title;
-              if (!choicesLabels && en?.choices_labels && typeof en.choices_labels === 'object') choicesLabels = en.choices_labels;
-            }
-          }
-          arr.push({ id: r.id, prompt_id: r.prompt_id, question: localizedQ || r.profile_prompt_templates?.question, response: resp, key: r.profile_prompt_templates?.key, choices_labels: choicesLabels });
-          promptsMap.set(r.profile_id, arr);
-        });
-        promptsMap.forEach((arr, k) => promptsMap.set(k, arr.sort((a,b)=> a.prompt_id - b.prompt_id)));
       }
-      const { data: interestRows, error: intErr } = await supabase
-        .from('profile_interests')
-        .select('profile_id, interests(name)')
-        .in('profile_id', ids);
-      if (intErr) console.warn('[event-swipe] interests error', intErr.message);
-      (interestRows || []).forEach((r: any) => {
-        const name = r.interests?.name;
-        if (typeof name === 'string' && name.length > 0) {
-          const arr = interestsMap.get(r.profile_id) || [];
-          arr.push(name);
-          interestsMap.set(r.profile_id, arr);
+      // Interests via SECURITY DEFINER RPC (bypass RLS safely)
+      if (profilesSource.length) {
+        try {
+          const idsAll = profilesSource.map(p => p.id);
+          const { data: interestRows } = await supabase
+            .rpc('profile_interests_bulk', { p_ids: idsAll });
+          (interestRows || []).forEach((r: any) => {
+            if (!r) return;
+            const arr = Array.isArray(r.interests) ? r.interests : [];
+            interestsMap.set(r.profile_id, arr);
+          });
+        } catch (e:any) {
+          console.warn('[event-swipe] interests rpc error', e?.message);
         }
-      });
-      interestsMap.forEach((arr, k) => interestsMap.set(k, Array.from(new Set(arr))));
+      }
+      // Bios via SECURITY DEFINER RPC
+      let biosMap = new Map<string, string | null>();
+      if (profilesSource.length) {
+        try {
+          const idsAll = profilesSource.map(p => p.id);
+          const { data: biosRows } = await supabase
+            .rpc('profile_bios_bulk', { p_ids: idsAll });
+          (biosRows || []).forEach((r: any) => { if (r?.profile_id) biosMap.set(r.profile_id, r.bio ?? null); });
+        } catch (e:any) {
+          console.warn('[event-swipe] bios rpc error', e?.message);
+        }
+      }
 
       let myInterests: string[] = [];
       try {
@@ -239,26 +300,46 @@ export default function EventSwipeScreen() {
         console.warn('[event-swipe] myInterests fetch exception', e?.message);
       }
 
+      // Distancias: si usamos la RPC event_candidates_cards, ya viene distance_km; solo hacemos bulk si fallback
+      let distMap = new Map<string, number | null>();
+      if (!usedRpc) {
+        try {
+          if (profilesSource.length) {
+            const idsAll = profilesSource.map(p => p.id);
+            const { data: distRows } = await supabase
+              .rpc('profile_distance_bulk', { p_viewer: user!.id, p_ids: idsAll });
+            (distRows || []).forEach((r: any) => { if (r?.profile_id) distMap.set(r.profile_id, (typeof r.distance_km === 'number' ? r.distance_km : null)); });
+          }
+        } catch (e:any) {
+          console.warn('[event-swipe] distance rpc error', e?.message);
+        }
+      }
+
       const profiles: CardProfile[] = (profilesSource || []).map((p: ProfileRow) => ({
         id: p.id,
         name: p.display_name ?? 'Usuario',
         age: typeof p.calculated_age === 'number' ? p.calculated_age : null,
-        interests: (interestsMap.get(p.id) || []).slice(0, 6),
+        bio: (biosMap.get(p.id) ?? p.bio ?? null),
+  interests: (interestsMap.get(p.id) || []),
         avatar: p.avatar_url || null,
         gender: normalizeLabel(p.gender) || null,
         interested_in: normalizeArr(p.interested_in),
         seeking: normalizeArr(p.seeking),
         photos: photosMap.get(p.id) || [],
-        prompts: promptsMap.get(p.id) || []
+        prompts: promptsMap.get(p.id) || [],
+        distanceKm: distMap.get(p.id) ?? (Array.isArray(rpcRows) ? (rpcRows as any[]).find((r: any) => r.candidate_id === p.id)?.distance_km ?? null : null)
       }));
-      const { data: likesRaw, error: likesErr } = await supabase
-        .from('likes')
-        .select('liked')
-        .eq('liker', user!.id)
-        .in('liked', ids);
-      if (likesErr) console.warn('[event-swipe] likes error', likesErr.message);
+      // Si la RPC fue usada, el servidor ya excluye likes/matches → no hace falta consultar ni filtrar decididos aquí.
       const decided = new Set<string>();
-      (likesRaw || []).forEach(r => decided.add(r.liked));
+      if (!usedRpc) {
+        const { data: likesRaw, error: likesErr } = await supabase
+          .from('likes')
+          .select('liked')
+          .eq('liker', user!.id)
+          .in('liked', profilesSource.map(p => p.id));
+        if (likesErr) console.warn('[event-swipe] likes error', likesErr.message);
+        (likesRaw || []).forEach(r => decided.add(r.liked));
+      }
 
       const { data: boosters, error: boostersErr } = await supabase
         .from('likes')
@@ -271,7 +352,7 @@ export default function EventSwipeScreen() {
 
       const { data: meProfileRaw, error: meErr } = await supabase
         .from('profiles')
-        .select('gender, interested_in, seeking')
+        .select('gender, interested_in, seeking, min_age, max_age')
         .eq('id', user!.id)
         .maybeSingle();
       if (meErr) console.warn('[event-swipe] me profile error', meErr.message);
@@ -308,7 +389,9 @@ export default function EventSwipeScreen() {
         }
         return Array.from(out);
       };
-      const myTargets = expandInterested(myInterestedIn, gMe);
+  const myTargets = expandInterested(myInterestedIn, gMe);
+  const myMinAge = Math.max(18, Math.min(99, (meProfileRaw as any)?.min_age ?? 18));
+  const myMaxAge = Math.max(myMinAge, Math.min(99, (meProfileRaw as any)?.max_age ?? 99));
 
       const wants = (list: string[], other: string | null): boolean => {
         if (!other) return true;
@@ -326,7 +409,15 @@ export default function EventSwipeScreen() {
       };
 
       const RELAX_MUTUAL = false;
-      let pending = profiles.filter(p => !decided.has(p.id) && hasMutual(p));
+      const inAge = (p: CardProfile): boolean => {
+        const a = typeof p.age === 'number' ? p.age : null;
+        if (a == null) return true;
+        return a >= myMinAge && a <= myMaxAge;
+      };
+      // Si usamos RPC, el servidor ya aplicó mutualidad de intereses y edad
+      let pending = usedRpc
+        ? profiles.filter(p => !decided.has(p.id))
+        : profiles.filter(p => !decided.has(p.id) && hasMutual(p) && inAge(p));
       if (RELAX_MUTUAL && profiles.length > 0 && pending.length === 0) {
         console.warn('[event-swipe] mutual produced 0; RELAX_MUTUAL enabled => showing non-decided all');
         pending = profiles.filter(p => !decided.has(p.id));
@@ -348,27 +439,33 @@ export default function EventSwipeScreen() {
       boostersList.sort(sorter);
       others.sort(sorter);
       const ordered = [...boostersList, ...others];
-      return { profiles: ordered, boostSet, myInterests } as SwipeQueryResult;
+  return { profiles: ordered, boostSet, myInterests, usedRpc } as SwipePage;
     }
   });
-
-  const swipeData: SwipeQueryResult | undefined = data as SwipeQueryResult | undefined;
-  const deck = swipeData?.profiles || [];
+  const pages = data?.pages || [];
+  const deck = pages.flatMap(p => p.profiles) || [];
+  const viewerInterests = useMemo(() => {
+    return pages.length ? (pages[0]?.myInterests || []) : [];
+  }, [pages]);
+  const boostSetGlobal = useMemo(() => {
+    const s = new Set<string>();
+    for (const pg of pages) { if (pg?.boostSet) { pg.boostSet.forEach(id => s.add(id)); } }
+    return s;
+  }, [pages]);
 
   const [uiDeck, setUiDeck] = useState<CardProfile[]>([]);
   const decidedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (!deck) return;
-    setUiDeck(prev => {
-      if (!prev.length) {
-        return deck.filter(p => !decidedRef.current.has(p.id));
-      }
-      const existing = new Set(prev.map(p => p.id));
-      const additions = deck.filter(p => !existing.has(p.id) && !decidedRef.current.has(p.id));
-      if (!additions.length) return prev;
-      return [...prev, ...additions];
-    });
+    if (!deck) { setUiDeck([]); return; }
+    decidedRef.current.clear();
+    setUiDeck(deck);
   }, [deck.map(p=>p.id).join('|')]);
+
+  // Auto-refill similar a Classic
+  useEffect(() => {
+    if (!hasNextPage) return;
+    if (uiDeck.length <= 5) { try { fetchNextPage(); } catch {} }
+  }, [uiDeck.length, hasNextPage, fetchNextPage]);
 
   useEffect(() => {
     if (!uiDeck.length && deck.length) {
@@ -379,8 +476,14 @@ export default function EventSwipeScreen() {
 
   const current = uiDeck[0];
   const next = uiDeck[1];
+  const onlineSet = useOnlineIds(current?.id ? [current.id] : []);
+  const onlineLabel = (i18n.language || '').toLowerCase().startsWith('es') ? 'En línea' : 'Online';
   const [photoIndex, setPhotoIndex] = useState(0);
   useEffect(()=>{ setPhotoIndex(0); }, [current?.id]);
+  // Simplified image swap: single image keyed by photo id + hidden loader to avoid previous-photo flash
+  const currentUri = useMemo(() => (current?.photos?.[photoIndex]?.url || current?.avatar || null), [current?.id, photoIndex]);
+  const [imgLoaded, setImgLoaded] = useState(false);
+  useEffect(() => { setImgLoaded(false); }, [current?.id, photoIndex]);
   const isDraggingRef = useRef(false);
   const gestureModeRef = useRef<'undecided' | 'photo' | 'card'>('undecided');
   const startXRef = useRef<number | null>(null);
@@ -389,8 +492,9 @@ export default function EventSwipeScreen() {
   const photoAutoProgress = useSharedValue(0);
   const pauseRef = useRef(false);
   const startTsRef = useRef(0);
-  const totalDurationRef = useRef(AUTO_ADVANCE_INTERVAL_MS);
-  const remainingRef = useRef(AUTO_ADVANCE_INTERVAL_MS);
+  const totalDurationRef = useRef<number>(AUTO_ADVANCE_INTERVAL_MS);
+  const remainingRef = useRef<number>(AUTO_ADVANCE_INTERVAL_MS);
+  const lastEndTsRef = useRef(0);
 
   const launchProgress = useCallback(() => {
     cancelAnimation(photoAutoProgress);
@@ -528,6 +632,24 @@ export default function EventSwipeScreen() {
     return () => { supabase.removeChannel(ch); };
   }, [eid, refetch]);
 
+  // Realtime: refrescar cuando cambien fotos o avatar de cualquier perfil mientras esta pantalla está abierta
+  useEffect(() => {
+    const ch = supabase
+      .channel(`event-photos-profiles-rt-${eid || 'global'}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'user_photos' },
+        () => { try { refetch(); } catch {} }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles' },
+        () => { try { refetch(); } catch {} }
+      )
+      .subscribe();
+    return () => { try { supabase.removeChannel(ch); } catch {} };
+  }, [eid, refetch]);
+
   useEffect(() => {
     const id = setInterval(() => { refetch(); refetchRemaining(); }, 45000);
     return () => clearInterval(id);
@@ -553,6 +675,20 @@ export default function EventSwipeScreen() {
     transform: [ { scale: 0.8 + superProgress.value * 0.6 } ]
   }));
 
+  // Next card appears from bottom as you drag the current one
+  const NEXT_CARD_OFFSET_Y = 26;
+  const NEXT_CARD_SCALE_MIN = 0.96;
+  const nextCardStyle = useAnimatedStyle(() => {
+    const pX = Math.min(1, Math.abs(translateX.value) / SWIPE_THRESHOLD_X);
+    const pY = Math.min(1, Math.max(0, -translateY.value) / SWIPE_THRESHOLD_Y);
+    const p = Math.max(pX, pY);
+    const ty = NEXT_CARD_OFFSET_Y * (1 - p);
+    const sc = NEXT_CARD_SCALE_MIN + (1 - NEXT_CARD_SCALE_MIN) * p;
+    // Hide the next card completely until user interaction begins
+    const op = p;
+    return { transform: [{ translateY: ty }, { scale: sc }], opacity: op };
+  });
+
   const particles = useMemo(() => Array.from({ length: SUPERLIKE_PARTICLES }).map((_, i) => ({
     id: i,
     offsetX: (Math.random() * 140) - 70,
@@ -576,6 +712,10 @@ export default function EventSwipeScreen() {
   }));
 
   const onEnd = ({ nativeEvent }: any) => {
+    // micro-debounce to avoid spurious double end events
+    const now = Date.now();
+    if (now - (lastEndTsRef.current || 0) < 80) return;
+    lastEndTsRef.current = now;
     const { translationX, translationY } = nativeEvent;
     isDraggingRef.current = false;
     const mode = gestureModeRef.current;
@@ -587,9 +727,18 @@ export default function EventSwipeScreen() {
       return;
     }
     if (mode === 'card') {
-      if (translationX > SWIPE_THRESHOLD_X && current) { translateX.value = withTiming(width * 1.2, { duration:220 }, () => runOnJS(performAction)(current.id, 'like')); } 
-      else if (translationX < -SWIPE_THRESHOLD_X && current) { translateX.value = withTiming(-width * 1.2, { duration:220 }, () => runOnJS(performAction)(current.id, 'pass')); } 
-      else { resetCard(); }
+      const SOFT_X = SWIPE_THRESHOLD_X * 0.7;
+      if (translationX > SWIPE_THRESHOLD_X && current) {
+        translateX.value = withTiming(width * 1.2, { duration:220 }, () => runOnJS(performAction)(current.id, 'like'));
+      } else if (translationX < -SWIPE_THRESHOLD_X && current) {
+        translateX.value = withTiming(-width * 1.2, { duration:220 }, () => runOnJS(performAction)(current.id, 'pass'));
+      } else if (translationX > SOFT_X && current) {
+        translateX.value = withTiming(width * 1.2, { duration:220 }, () => runOnJS(performAction)(current.id, 'like'));
+      } else if (translationX < -SOFT_X && current) {
+        translateX.value = withTiming(-width * 1.2, { duration:220 }, () => runOnJS(performAction)(current.id, 'pass'));
+      } else {
+        resetCard();
+      }
     } else {
       resetCard();
     }
@@ -689,28 +838,63 @@ export default function EventSwipeScreen() {
     }
     return arr;
   }, [current?.id, current?.prompts]);
-  const currentPrompt = (photoIndex < promptOrder.length) ? promptOrder[photoIndex] : null;
-  const renderSinglePrompt = () => {
-    if (!currentPrompt) return null;
-    const respRaw = currentPrompt.response;
+
+  const prioritizedPrompts = useMemo(() => {
+    const isArrayPrompt = (p: any) => Array.isArray(p?.response);
+    const isLanguagesKey = (k: string) => {
+      const key = k.toLowerCase();
+      const LANGUAGE_KEYS = new Set(['languages', 'idiomas', 'languagespoken', 'idiomashablados', 'lang', 'langs']);
+      if (LANGUAGE_KEYS.has(key)) return true;
+      return key.includes('language') || key.includes('idioma') || key.includes('idiom') || key.includes('lang');
+    };
+    const isLikelyLanguages = (p: any) => {
+      const k = String(p?.key || '');
+      if (k && isLanguagesKey(k)) return true;
+      const q = String(p?.question || '').toLowerCase();
+      if (q.includes('idiomas') || q.includes('lengu') || q.includes('languages') || q.includes('speak')) return true;
+      const resp = p?.response;
+      if (Array.isArray(resp) && resp.length) {
+        const SAMPLE_LANGS = ['es', 'en', 'fr', 'de', 'it', 'pt', 'chino', 'chinese', 'inglés', 'español', 'francés'];
+        const s = String(resp[0] || '').toLowerCase();
+        if (SAMPLE_LANGS.some(w => s.includes(w))) return true;
+      }
+      return false;
+    };
+    const score = (p: any) => (isLikelyLanguages(p) ? 3 : isArrayPrompt(p) ? 2 : 1);
+    const base = [...promptOrder];
+    base.sort((a, b) => score(b) - score(a));
+    return base;
+  }, [promptOrder]);
+
+  // Two prompts per photo starting at photo index 2 (third visual card). No compact grouping, no overflow indicator.
+  // If there are more prompts than slots*2 we simply truncate (no +N badge per spec).
+  const promptSlots = useMemo(() => Math.max(0, (current?.photos?.length || 0) - 2), [current?.photos?.length]);
+  const visiblePrompts = useMemo(() => prioritizedPrompts.slice(0, promptSlots * 2), [prioritizedPrompts, promptSlots]);
+
+  const renderSinglePrompt = (p: any) => {
+    if (!p) return null;
+    const respRaw = p.response;
     const isArray = Array.isArray(respRaw);
-    const answerText = !isArray ? tAnswer(String(respRaw).trim(), (currentPrompt as any).choices_labels) : '';
+    const answerText = !isArray ? tAnswer(String(respRaw).trim(), (p as any).choices_labels) : '';
     return (
       <View style={{ marginTop:8, alignSelf:'flex-start', maxWidth:'92%' }}>
-        {currentPrompt.question && (
+        {p.question && (
           <Text style={{ color:'#fff', fontSize:12, fontWeight:'700', opacity:0.9, marginBottom:4 }} numberOfLines={2}>
-            {tPromptQ(currentPrompt.question, (currentPrompt as any).key)}
+            {prefixIcon(
+              tPromptQ(p.question, (p as any).key),
+              (p as any).icon as string | undefined
+            )}
           </Text>
         )}
         {isArray ? (
           <View style={{ flexDirection:'row', flexWrap:'wrap', gap:6 }}>
             {respRaw.slice(0,6).map((opt: any, i: number) => (
-              <View key={i} style={{ backgroundColor:'rgba(0,0,0,0.45)', paddingHorizontal:10, paddingVertical:5, borderRadius:14 }}>
-                <Text style={{ color:'#fff', fontSize:11.5, fontWeight:'600' }} numberOfLines={1}>{tAnswer(opt, (currentPrompt as any).choices_labels)}</Text>
+              <View key={i} style={{ backgroundColor:'rgba(255,255,255,0.12)', borderWidth:1, borderColor:'rgba(255,255,255,0.18)', paddingHorizontal:10, paddingVertical:5, borderRadius:14 }}>
+                <Text style={{ color:'#fff', fontSize:11.5, fontWeight:'600' }} numberOfLines={1}>{tAnswer(opt, (p as any).choices_labels)}</Text>
               </View>
             ))}
             {respRaw.length > 6 && (
-              <View style={{ backgroundColor:'rgba(0,0,0,0.45)', paddingHorizontal:10, paddingVertical:5, borderRadius:14 }}>
+              <View style={{ backgroundColor:'rgba(255,255,255,0.12)', borderWidth:1, borderColor:'rgba(255,255,255,0.18)', paddingHorizontal:10, paddingVertical:5, borderRadius:14 }}>
                 <Text style={{ color:'#fff', fontSize:11.5, fontWeight:'600' }}>+{respRaw.length-6}</Text>
               </View>
             )}
@@ -722,10 +906,51 @@ export default function EventSwipeScreen() {
     );
   };
 
+  // Removed CompactPromptGroup – now we only render up to two prompts side-by-side per photo slot.
+
+  // Full interest list (server enforces per-category limit); highlight common ones.
+  const interestChips = useMemo(() => {
+    const ui: string[] = Array.isArray(current?.interests) ? current!.interests : [];
+    return ui;
+  }, [current?.id, current?.interests]);
+
+  // Compute one-line bio (grapheme-safe truncation)
+  const bioLine = useMemo(() => {
+    const raw = (current?.bio || '').trim();
+    if (!raw) return null;
+    return truncateByGraphemes(raw, 90);
+  }, [current?.id, current?.bio]);
+
+  // Compute prompt highlights (emoji + short label) to fill if interests < 3
+  const promptHighlights = useMemo(() => {
+    const maxNeeded = Math.min(2, Math.max(0, 3 - (interestChips?.length || 0)));
+    if (!current?.prompts || maxNeeded <= 0) return [] as string[];
+    const makeLabel = (p: any): string | null => {
+      const emoji = (p?.icon as string) || '✨';
+      const resp = p?.response;
+      if (Array.isArray(resp) && resp.length > 0) {
+        const raw = resp[0];
+        const label = tAnswer(raw, p?.choices_labels);
+        const txt = String(label || '').trim();
+        if (!txt) return null;
+        const pretty = txt.length > 18 ? `${txt.slice(0,16)}…` : txt;
+        return `${emoji} ${pretty}`;
+      }
+      return null;
+    };
+    const all = (current.prompts || [])
+      .map(makeLabel)
+      .filter((s: any): s is string => typeof s === 'string' && s.length > 0);
+    const seen = new Set<string>();
+    const uniq = [] as string[];
+    for (const s of all) { if (!seen.has(s)) { seen.add(s); uniq.push(s); } }
+    return uniq.slice(0, maxNeeded);
+  }, [current?.id, current?.prompts, interestChips]);
+
   const boosterTipShownRef = useRef(false);
   const [showBoosterTip, setShowBoosterTip] = useState(false);
   useEffect(() => {
-    if (current && swipeData?.boostSet?.has(current.id) && !boosterTipShownRef.current) {
+    if (current && boostSetGlobal.has(current.id) && !boosterTipShownRef.current) {
       boosterTipShownRef.current = true;
       setShowBoosterTip(true);
       const t = setTimeout(()=> setShowBoosterTip(false), 3200);
@@ -733,7 +958,7 @@ export default function EventSwipeScreen() {
     } else if (!current) {
       setShowBoosterTip(false);
     }
-  }, [current?.id, (data as any)?.boostSet]);
+  }, [current?.id, boostSetGlobal]);
 
   const [tutorialVisible, setTutorialVisible] = useState(false);
   const tutorialVisibleRef = useRef(false);
@@ -749,7 +974,7 @@ export default function EventSwipeScreen() {
   // Empty state: use unified component
 
   return (
-    <Screen style={{ padding:0 }}>
+    <Screen style={{ padding:0 }} edges={[]}> 
       {isLoading && (
         <YStack style={{ flex:1, justifyContent:'center', alignItems:'center' }}>
           <ActivityIndicator color={theme.colors.primary} />
@@ -765,22 +990,76 @@ export default function EventSwipeScreen() {
         />
       )}
       {!isLoading && current && (
-        <View style={{ flex:1, alignItems:'center', paddingTop: CARD_TOP_PADDING, paddingBottom: ACTION_BAR_SPACER }}>
-          {next && (
-            <View pointerEvents='none' style={{ position:'absolute', top: CARD_TOP_PADDING, width:CARD_WIDTH, height:CARD_HEIGHT, borderRadius:24, overflow:'hidden', backgroundColor: theme.colors.card, opacity:0.4 }} />
+        <View style={{ flex:1, alignItems:'stretch', padding: OUTER_INSET }}>
+          {process.env.EXPO_PUBLIC_SWIPE_DEBUG === '1' && pages.length > 0 && !pages[0].usedRpc && (
+            <View style={{ position:'absolute', top:4, left:4, zIndex:20, backgroundColor:'#c53030', paddingHorizontal:10, paddingVertical:6, borderRadius:8 }}>
+              <Text style={{ color:'#fff', fontSize:11, fontWeight:'700' }}>FALLBACK RPC</Text>
+            </View>
+          )}
+          {next && imgLoaded && (
+            <Animated.View pointerEvents='none' style={[{ position:'absolute', top: 0, left:0, right:0, bottom: 0, borderRadius:24, overflow:'hidden', backgroundColor: theme.colors.card }, nextCardStyle]}>
+              {next.photos && next.photos.length > 0 ? (
+                <Image
+                  source={{ uri: next.photos[0]?.url || next.avatar || '' }}
+                  style={{ flex:1 }}
+                  resizeMode='cover'
+                />
+              ) : next.avatar ? (
+                <Image source={{ uri: next.avatar }} style={{ flex:1 }} resizeMode='cover' />
+              ) : (
+                <View style={{ flex:1, backgroundColor: theme.colors.border }} />
+              )}
+            </Animated.View>
           )}
           <PanGestureHandler onGestureEvent={handleGestureEvent} onEnded={onEnd}>
-            <Animated.View style={[{ width:CARD_WIDTH, height:CARD_HEIGHT, borderRadius:24, overflow:'hidden', backgroundColor: theme.colors.card }, cardStyle]}>
+            <Animated.View style={[{ width:'100%', height:'100%', borderRadius:24, overflow:'hidden', backgroundColor: theme.colors.card }, cardStyle]}>
               <View style={{ flex:1 }}>
-                {current.photos && current.photos.length > 0 ? (
-                  <Animated.Image
-                    key={current.photos[photoIndex]?.id || 'main'}
-                    source={{ uri: current.photos[photoIndex]?.url || current.avatar || '' }}
-                    style={[{ flex:1 }, parallaxStyle]}
-                    resizeMode='cover'
-                  />
-                ) : current.avatar ? (
-                  <Image source={{ uri: current.avatar }} style={{ flex:1 }} resizeMode='cover' />
+                {current?.photos && current.photos.length > 0 ? (
+                  imgLoaded ? (
+                    <Animated.Image
+                      key={`active-${current.id}-${current.photos?.[photoIndex]?.id ?? 'av'}`}
+                      source={{ uri: currentUri || '' }}
+                      style={[{ flex:1 }, parallaxStyle]}
+                      resizeMode='cover'
+                      fadeDuration={0 as any}
+                    />
+                  ) : (
+                    <>
+                      <View style={{ flex:1, backgroundColor: theme.colors.card }} />
+                      {!!currentUri && (
+                        <Image
+                          key={`loader-${current.id}-${current.photos?.[photoIndex]?.id ?? 'av'}`}
+                          source={{ uri: currentUri }}
+                          style={{ position:'absolute', top:0, left:0, right:0, bottom:0, opacity:0 }}
+                          resizeMode='cover'
+                          fadeDuration={0}
+                          onLoadEnd={() => setImgLoaded(true)}
+                        />
+                      )}
+                    </>
+                  )
+                ) : current?.avatar ? (
+                  imgLoaded ? (
+                    <Animated.Image
+                      key={`active-${current.id}-avatar`}
+                      source={{ uri: current.avatar }}
+                      style={[{ flex:1 }, parallaxStyle]}
+                      resizeMode='cover'
+                      fadeDuration={0 as any}
+                    />
+                  ) : (
+                    <>
+                      <View style={{ flex:1, backgroundColor: theme.colors.card }} />
+                      <Image
+                        key={`loader-${current.id}-avatar`}
+                        source={{ uri: current.avatar }}
+                        style={{ position:'absolute', top:0, left:0, right:0, bottom:0, opacity:0 }}
+                        resizeMode='cover'
+                        fadeDuration={0}
+                        onLoadEnd={() => setImgLoaded(true)}
+                      />
+                    </>
+                  )
                 ) : (
                   <View style={{ flex:1, backgroundColor: theme.colors.border, alignItems:'center', justifyContent:'center' }}>
                     <Text style={{ color: theme.colors.subtext }}>Sin foto</Text>
@@ -841,13 +1120,76 @@ export default function EventSwipeScreen() {
               <Animated.View pointerEvents='none' style={[{ position:'absolute', top:80, alignSelf:'center', paddingHorizontal:18, paddingVertical:10, borderWidth:4, borderColor: theme.colors.primary, borderRadius:999, backgroundColor:'rgba(0,0,0,0.25)' }, superOpacityStyle]}>
                 <Text style={{ color: theme.colors.primary, fontSize:24, fontWeight:'800' }}>SUPER</Text>
               </Animated.View>
-              <View pointerEvents='none' style={{ position:'absolute', left:0, right:0, bottom:INFO_OVERLAY_RAISE, paddingHorizontal:18, paddingBottom:18, paddingTop:12 }}>
-                <Text style={{ color:'#fff', fontSize:22, fontWeight:'800', textShadowColor:'rgba(0,0,0,0.55)', textShadowOffset:{ width:0, height:1 }, textShadowRadius:4 }} numberOfLines={1}>
-                  {current.name}{current.age?`, ${current.age}`:''}
-                </Text>
-                <View style={{ marginTop:6, maxWidth:'92%' }}>
-                  {renderSinglePrompt()}
+              {/* Bottom legibility gradient (phase 1) */}
+              <LinearGradient
+                pointerEvents='none'
+                colors={['rgba(0,0,0,0)','rgba(0,0,0,0.28)','rgba(0,0,0,0.55)','rgba(0,0,0,0.70)']}
+                locations={[0,0.45,0.75,1]}
+                style={{ position:'absolute', left:0, right:0, bottom:0, height:'48%' }}
+              />
+              <View pointerEvents='box-none' style={{ position:'absolute', left:0, right:0, bottom:INFO_OVERLAY_RAISE, paddingHorizontal:18, paddingBottom:18, paddingTop:12 }}>
+                <View style={{ flexDirection:'row', alignItems:'center', gap:8 }}>
+                  <Text style={{ color:'#fff', fontSize:22, fontWeight:'800', textShadowColor:'rgba(0,0,0,0.55)', textShadowOffset:{ width:0, height:1 }, textShadowRadius:4 }} numberOfLines={1}>
+                    {current.name}{current.age?`, ${current.age}`:''}
+                  </Text>
                 </View>
+                <View style={{ flexDirection:'row', alignItems:'center', gap:8, marginTop:4 }}>
+                  {onlineSet.has(current.id) && (
+                    <View style={{ paddingHorizontal:8, paddingVertical:3, borderRadius:10, backgroundColor:'rgba(34,197,94,0.18)', borderWidth:1, borderColor:'rgba(34,197,94,0.55)' }}>
+                      <Text style={{ color:'#fff', fontSize:11, fontWeight:'800' }}>{onlineLabel}</Text>
+                    </View>
+                  )}
+                  {typeof current.distanceKm === 'number' && isFinite(current.distanceKm) && (
+                    <View style={{ paddingHorizontal:8, paddingVertical:3, borderRadius:10, backgroundColor:'rgba(59,130,246,0.18)', borderWidth:1, borderColor:'rgba(59,130,246,0.55)' }}>
+                      <Text style={{ color:'#fff', fontSize:11, fontWeight:'800' }}>📍 {formatDistanceKm(current.distanceKm!)}</Text>
+                    </View>
+                  )}
+                </View>
+                {/* Sectioned content by photo index */}
+                {photoIndex === 0 && !!(current.bio || '').trim() && (
+                  <Text style={{ color:'#fff', fontSize:13.5, fontWeight:'600', opacity:0.95, marginTop:4 }} numberOfLines={4}>
+                    {(current.bio || '').trim()}
+                  </Text>
+                )}
+                {photoIndex === 1 && interestChips.length > 0 && (
+                  <View style={{ marginTop:6 }}>
+                    <Text style={{ color:'#fff', fontSize:12, fontWeight:'700', opacity:0.9 }}>Intereses</Text>
+                    <View style={{ marginTop:6, flexDirection:'row', flexWrap:'wrap', gap:6, maxWidth:'96%', maxHeight:140 }}>
+                      {interestChips.map((label, i) => {
+                        const isCommon = (viewerInterests || []).includes(label);
+                        const chipStyle = isCommon
+                          ? { backgroundColor: colorWithAlpha(theme.colors.primary, 0.18), borderWidth: 1, borderColor: theme.colors.primary }
+                          : { backgroundColor:'rgba(255,255,255,0.12)', borderWidth:1, borderColor:'rgba(255,255,255,0.18)' };
+                        return (
+                          <View key={`int-${label}-${i}`} style={{ paddingHorizontal:10, paddingVertical:5, borderRadius:14, ...chipStyle }}>
+                            <Text style={{ color:'#fff', fontSize:11.5, fontWeight:'700' }} numberOfLines={1}>{label.length > 18 ? `${label.slice(0,16)}…` : label}</Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+                {photoIndex >= 2 && (() => {
+                  const slotIdx = photoIndex - 2;
+                  if (slotIdx < 0 || slotIdx >= promptSlots) return null;
+                  const left = visiblePrompts[slotIdx * 2];
+                  const right = visiblePrompts[slotIdx * 2 + 1];
+                  if (!left && !right) return null;
+                  return (
+                    <View style={{ marginTop:6, maxWidth:'96%', flexDirection:'row', gap:8 }}>
+                      {left && (
+                        <View style={{ flex: right ? 1 : 1 }}>
+                          {renderSinglePrompt(left)}
+                        </View>
+                      )}
+                      {right && (
+                        <View style={{ flex:1 }}>
+                          {renderSinglePrompt(right)}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })()}
               </View>
             </Animated.View>
           </PanGestureHandler>
@@ -868,22 +1210,7 @@ export default function EventSwipeScreen() {
           />
         </View>
       )}
-      {match && (
-        <View style={{ position:'absolute', top:0, left:0, right:0, bottom:0, backgroundColor:'rgba(0,0,0,0.65)', justifyContent:'center', alignItems:'center', padding:32 }}>
-          <View style={{ backgroundColor: theme.colors.card, padding:24, borderRadius:24, width:'80%', maxWidth:400, alignItems:'center', gap:12 }}>
-            <Text style={{ color: theme.colors.text, fontSize:26, fontWeight:'800' }}>¡Match!</Text>
-            <Text style={{ color: theme.colors.subtext, textAlign:'center' }}>Se han gustado mutuamente. ¿Abrir el chat ahora?</Text>
-            <View style={{ flexDirection:'row', gap:12, marginTop:8 }}>
-              <Pressable onPress={() => { setMatch(null); }} style={() => ({ paddingVertical:12, paddingHorizontal:20, borderRadius:30, backgroundColor: theme.colors.card, borderWidth:1, borderColor: theme.colors.border })}>
-                <Text style={{ color: theme.colors.text, fontWeight:'700' }}>Seguir</Text>
-              </Pressable>
-              <Pressable onPress={() => { const { matchId } = match; setMatch(null); router.push(`/(tabs)/chat/${matchId}`); }} style={() => ({ paddingVertical:12, paddingHorizontal:20, borderRadius:30, backgroundColor: theme.colors.primary, borderWidth:1, borderColor: theme.colors.primary })}>
-                <Text style={{ color: theme.colors.primaryText || '#fff', fontWeight:'700' }}>Ir al chat</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      )}
+      {/* Match popup unified via MatchPopupProvider */}
       {tutorialVisible && (
         <View style={{ position:'absolute', top:0, left:0, right:0, bottom:0, backgroundColor:'rgba(0,0,0,0.65)' }}>
           <View style={{ flex:1 }}>

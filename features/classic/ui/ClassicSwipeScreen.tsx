@@ -2,38 +2,52 @@ import { useEffect, useState, useCallback, useRef, useMemo, memo } from 'react'
 
 import { View, Text, Dimensions, Image, ActivityIndicator, Alert, Pressable } from 'react-native'
 
+import { LinearGradient } from 'expo-linear-gradient'
 import * as Haptics from 'expo-haptics'
 import { useRouter } from 'expo-router'
 
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PanGestureHandler } from 'react-native-gesture-handler'
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, runOnJS, cancelAnimation } from 'react-native-reanimated'
 
 import { YStack, XStack } from 'components/tg'
 import { Screen } from 'components/ui'
 import { SwipeButtons } from 'features/profile/ui/swipe/SwipeButtons'
-import { ensureMatchConsistency } from 'lib/match'
-import { supabase } from 'lib/supabase'
-import { remainingSuperlikes, incSuperlike } from 'lib/superlikes'
-import { theme } from 'lib/theme'
-import { useAuth } from 'lib/useAuth'
+import { SWIPE } from 'features/swipe/constants'
 
-interface ProfileRow { id: string; display_name: string | null; calculated_age?: number | null; gender?: string | null; interests?: string[] | null; avatar_url?: string | null; interested_in?: string[] | null; seeking?: string[] | null }
+// lib imports alphabetized
+import { truncateByGraphemes } from 'lib/graphemes'
+import { i18n } from 'lib/i18n'
+import { ensureMatchConsistency } from 'lib/match'
+import { ensurePresence, useOnlineIds } from 'lib/presence'
+import { getLocaleChain, pickFirstNonEmptyTitle, mergeChoiceLabels } from 'lib/promptLocale'
+import { remainingSuperlikes, incSuperlike } from 'lib/superlikes'
+import { supabase } from 'lib/supabase'
+import { theme } from 'lib/theme'
+import { formatDistanceKm } from 'lib/ui/formatDistance'
+import { prefixIcon } from 'lib/ui/prefixIcon'
+import { useAuth } from 'lib/useAuth'
+import { normalizeAvatarUrl } from 'lib/avatars'
+
+interface ProfileRow { id: string; display_name: string | null; bio?: string | null; calculated_age?: number | null; gender?: string | null; interests?: string[] | null; avatar_url?: string | null; interested_in?: string[] | null; seeking?: string[] | null }
 type CardProfile = {
   id: string;
   name: string;
   age: number | null;
+  bio?: string | null;
   interests: string[];
   avatar: string | null;
   gender: string | null;
   interested_in: string[];
   seeking: string[];
   photos: { id: number; url: string; sort_order: number }[];
-  prompts?: { id: number; prompt_id: number; question?: string; response: any; key?: string; choices_labels?: Record<string,string>|null }[];
+  prompts?: { id: number; prompt_id: number; question?: string; response: any; key?: string; choices_labels?: Record<string,string>|null; icon?: string | null }[];
+  distanceKm?: number | null;
+  photosVersion?: string | null;
 }
 
 const { width, height } = Dimensions.get('window')
-const CARD_WIDTH = width * 0.9
+const CARD_WIDTH = width
 const HEADER_SPACER = 8
 const ACTION_BAR_SPACER = 150
 const RAW_CARD_HEIGHT = height * 0.72
@@ -41,20 +55,41 @@ const EXTRA_TOP_OFFSET = 0
 const CARD_TOP_PADDING = HEADER_SPACER + 10 + EXTRA_TOP_OFFSET
 const CARD_BOTTOM_PADDING = ACTION_BAR_SPACER
 const AVAILABLE_HEIGHT = height - CARD_TOP_PADDING - CARD_BOTTOM_PADDING
-let CARD_HEIGHT = Math.min(RAW_CARD_HEIGHT, AVAILABLE_HEIGHT - 8)
-if (CARD_HEIGHT < 320) CARD_HEIGHT = Math.min(AVAILABLE_HEIGHT - 4, 320)
-const INFO_OVERLAY_RAISE = 110
-const SWIPE_THRESHOLD_X = 110
-const SWIPE_THRESHOLD_Y = 120
-const AUTO_ADVANCE = true
-const AUTO_ADVANCE_INTERVAL_MS = 4000
-const EDGE_ZONE_RATIO = 0.28
-const PHOTO_SWIPE_DISTANCE = 60
-const PROMOTE_DISTANCE = SWIPE_THRESHOLD_X * 0.52
-const SUPERLIKE_ACTIVATION_Y = 40
-const SUPERLIKE_PARTICLES = 10
-const PARALLAX_FACTOR = -0.08
+let CARD_HEIGHT = AVAILABLE_HEIGHT
+const INFO_OVERLAY_RAISE = SWIPE.INFO_OVERLAY_RAISE
+const SWIPE_THRESHOLD_X = SWIPE.SWIPE_THRESHOLD_X
+const SWIPE_THRESHOLD_Y = SWIPE.SWIPE_THRESHOLD_Y
+const AUTO_ADVANCE = SWIPE.AUTO_ADVANCE
+const AUTO_ADVANCE_INTERVAL_MS = SWIPE.AUTO_ADVANCE_INTERVAL_MS
+const EDGE_ZONE_RATIO = SWIPE.CARD_EDGE_ZONE_RATIO
+const PHOTO_SWIPE_DISTANCE = SWIPE.PHOTO_SWIPE_DISTANCE
+const PROMOTE_DISTANCE = SWIPE.SWIPE_THRESHOLD_X * 0.52
+const SUPERLIKE_ACTIVATION_Y = SWIPE.SUPERLIKE_ACTIVATION_Y
+const SUPERLIKE_PARTICLES = SWIPE.SUPERLIKE_PARTICLES
+const PARALLAX_FACTOR = SWIPE.PARALLAX_FACTOR
 const TUTORIAL_ACTIONS_AUTO_DISMISS = 3
+// Minimal outer inset so the card doesn't touch screen edges
+const OUTER_INSET = 6
+
+// Small helper to build rgba from hex (for subtle primary background in common chips)
+const colorWithAlpha = (hex: string, alpha: number) => {
+  if (!hex) return `rgba(0,0,0,${alpha})`
+  let h = hex.trim()
+  if (h.startsWith('#')) h = h.slice(1)
+  if (h.length === 3) {
+    const r = parseInt(h[0] + h[0], 16)
+    const g = parseInt(h[1] + h[1], 16)
+    const b = parseInt(h[2] + h[2], 16)
+    return `rgba(${r},${g},${b},${alpha})`
+  }
+  if (h.length >= 6) {
+    const r = parseInt(h.slice(0, 2), 16)
+    const g = parseInt(h.slice(2, 4), 16)
+    const b = parseInt(h.slice(4, 6), 16)
+    return `rgba(${r},${g},${b},${alpha})`
+  }
+  return `rgba(0,0,0,${alpha})`
+}
 
 const PhotoProgressSegment = memo(function PhotoProgressSegment({ idx, activeIndex, progress, onPress }: { idx: number; activeIndex: number; progress: any; onPress?: () => void }) {
   const [w, setW] = useState(0)
@@ -81,6 +116,10 @@ export default function ClassicSwipeScreen() {
   const { user } = useAuth()
   const qc = useQueryClient()
   const router = useRouter()
+  const DEBUG_PHOTO = process.env.EXPO_PUBLIC_SWIPE_PHOTO_DEBUG === '1'
+
+  // Start realtime presence for current user (once per mount)
+  useEffect(() => { if (user?.id) ensurePresence(user.id) }, [user?.id])
 
   const { data: remaining = 0, refetch: refetchRemaining } = useQuery({
     enabled: !!user,
@@ -102,42 +141,118 @@ export default function ClassicSwipeScreen() {
     }
   })
 
-  interface SwipeQueryResult { profiles: CardProfile[]; boostSet: Set<string>; myInterests: string[] }
-  const { data, isLoading, refetch } = useQuery<SwipeQueryResult>({
+  const PAGE_SIZE = 50
+  interface SwipePage { profiles: CardProfile[]; boostSet: Set<string>; myInterests: string[]; usedRpc: boolean }
+  const { data, isLoading, fetchNextPage, hasNextPage, refetch } = useInfiniteQuery<SwipePage>({
     enabled: !!user,
-    // Include lat/lng in the key so a location change forces refetch
-    queryKey: ['classic-swipe-profiles', user?.id, myLoc?.lat ?? null, myLoc?.lng ?? null],
-    queryFn: async (): Promise<SwipeQueryResult> => {
-      if (!user?.id) return { profiles: [], boostSet: new Set(), myInterests: [] }
+    queryKey: ['classic-swipe-profiles-v2', user?.id, myLoc?.lat ?? null, myLoc?.lng ?? null],
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, pages, lastOffset) => {
+      // Si la página llegó llena, asumimos que puede haber más
+      return lastPage?.profiles?.length === PAGE_SIZE ? (Number(lastOffset) + PAGE_SIZE) : undefined
+    },
+  queryFn: async ({ pageParam }): Promise<SwipePage> => {
+  if (!user?.id) return { profiles: [], boostSet: new Set(), myInterests: [], usedRpc: false }
+      const offset = typeof pageParam === 'number' ? pageParam : 0
 
       // Preferred path: SECURITY DEFINER RPC returns cards with profile fields (bypasses RLS)
       try {
-        const { data: cardRows, error: cardsErr } = await supabase
-          .rpc('classic_candidates_cards', { p_user_id: user.id, p_limit: 200 })
-        if (!cardsErr && Array.isArray(cardRows) && cardRows.length) {
-          const profiles: CardProfile[] = cardRows
+        // Intentamos usar la nueva RPC v2 (estable con photos_version); fallback a la anterior si no existe
+        const { data: cardRowsV2, error: cardsErrV2 } = await supabase
+          .rpc('classic_candidates_cards_with_photos_v2', { p_user_id: user.id, p_limit: PAGE_SIZE, p_offset: offset })
+        const cardRows = (!cardsErrV2 && Array.isArray(cardRowsV2)) ? cardRowsV2 : []
+        if (!cardsErrV2 && Array.isArray(cardRows) && cardRows.length) {
+          let profiles: CardProfile[] = cardRows
             .filter((r: any) => r.candidate_id !== user.id)
             .map((r: any) => ({
               id: r.candidate_id,
               name: r.display_name ?? 'Usuario',
               age: typeof r.calculated_age === 'number' ? r.calculated_age : null,
+              bio: null,
               interests: [],
-              avatar: r.avatar_url || null,
+              avatar: normalizeAvatarUrl(r.avatar_url || null),
               gender: (r.gender ?? null),
               interested_in: Array.isArray(r.interested_in) ? r.interested_in : [],
               seeking: Array.isArray(r.seeking) ? r.seeking : [],
-              photos: [],
-              prompts: []
+              photos: Array.isArray((r as any).photos)
+                ? (r as any).photos
+                    .map((x: any) => {
+                      const url = normalizeAvatarUrl(String(x.url || ''))
+                      return url ? { id: Number(x.id), url, sort_order: Number(x.sort_order ?? 0) } : null
+                    })
+                    .filter(Boolean) as { id: number; url: string; sort_order: number }[]
+                : [],
+              prompts: [],
+              distanceKm: (typeof (r as any).distance_km === 'number' ? (r as any).distance_km : null),
+              photosVersion: typeof (r as any).photos_version === 'string' ? (r as any).photos_version : null
             }))
 
           // Boosters: who gave me superlike (any context)
+          const idsAll = profiles.map(p => p.id)
           const { data: boosters } = await supabase
             .from('likes')
             .select('liker')
             .eq('liked', user!.id)
             .eq('type', 'superlike')
-          const idsAll = profiles.map(p => p.id)
           const boostSet = new Set<string>((boosters || []).map(b => (b as any).liker).filter((id: string) => idsAll.includes(id)))
+
+          // Photos: ya vienen embebidas en classic_candidates_cards_with_photos → no bulk
+
+          // Fetch bios for candidates via SECURITY DEFINER RPC (bypass RLS safely)
+          try {
+            if (idsAll.length) {
+              const { data: biosRows } = await supabase
+                .rpc('profile_bios_bulk', { p_ids: idsAll })
+              const bioMap = new Map<string, string | null>()
+              ;(biosRows || []).forEach((r: any) => { if (r?.profile_id) bioMap.set(r.profile_id, r.bio ?? null) })
+              if (__DEV__) {
+                const missing = profiles.filter(p => !bioMap.has(p.id)).map(p => p.id)
+                console.debug('[classic] bios fetched', { requested: idsAll.length, got: (biosRows||[]).length, missing: missing.slice(0, 5) })
+              }
+              profiles = profiles.map(p => ({ ...p, bio: bioMap.get(p.id) ?? null }))
+            }
+          } catch (e: any) {
+            if (__DEV__) console.warn('[classic] bios fetch error', e?.message)
+          }
+
+          // Distancias: ya vienen en classic_candidates_cards.distance_km; no se hace llamada extra
+
+          // Interests for candidates via SECURITY DEFINER RPC (bypass RLS safely)
+          try {
+            if (idsAll.length) {
+              const { data: interestRows } = await supabase
+                .rpc('profile_interests_bulk', { p_ids: idsAll })
+              const interestsMap = new Map<string, string[]>()
+              ;(interestRows || []).forEach((r: any) => {
+                if (!r) return
+                const arr = Array.isArray(r.interests) ? r.interests : []
+                interestsMap.set(r.profile_id, arr)
+              })
+              profiles = profiles.map(p => ({
+                ...p,
+                interests: (interestsMap.get(p.id) || [])
+              }))
+            }
+          } catch {}
+
+          // Prompts for candidates via SECURITY DEFINER RPC (include localized choices labels)
+          try {
+            if (idsAll.length) {
+              const { data: promptRows } = await supabase
+                .rpc('profile_prompts_bulk', { p_ids: idsAll, p_locale: i18n.language || 'es' })
+              const promptsMap = new Map<string, any[]>()
+              ;(promptRows || []).forEach((r: any) => {
+                if (!r?.profile_id) return
+                const arr = promptsMap.get(r.profile_id) || []
+                // Include icon and question if the RPC returns them (backend update ready); else leave null
+                arr.push({ id: r.prompt_id, prompt_id: r.prompt_id, key: r.key, question: r.question || null, response: r.answer, choices_labels: r.choices_labels || null, icon: r.icon || null })
+                promptsMap.set(r.profile_id, arr)
+              })
+              promptsMap.forEach((arr, k) => promptsMap.set(k, arr.sort((a,b)=> a.prompt_id - b.prompt_id)))
+              profiles = profiles.map(p => ({ ...p, prompts: promptsMap.get(p.id) || [] }))
+            }
+          } catch {}
+
 
           const boostersList = profiles.filter(p => boostSet.has(p.id))
           const others = profiles.filter(p => !boostSet.has(p.id))
@@ -163,18 +278,113 @@ export default function ClassicSwipeScreen() {
             myInterests = Array.from(new Set(myInterests))
           } catch {}
 
-          return { profiles: [...boostersList, ...others], boostSet, myInterests }
+      return { profiles: [...boostersList, ...others], boostSet, myInterests, usedRpc: true }
         }
       } catch (e) {
         console.warn('[classic] cards RPC error', (e as any)?.message)
       }
 
-      // Fallback path: legacy RPC + client-side profile fetch (may be blocked by RLS)
+      // Fallback path: legacy RPC (cards with photos) → si existe, úsalo antes de simple
+      if (!user?.id) return { profiles: [], boostSet: new Set(), myInterests: [], usedRpc: false }
+      try {
+        const { data: legacyRows, error: legacyErr } = await supabase
+          .rpc('classic_candidates_cards_with_photos', { p_user_id: user.id, p_limit: PAGE_SIZE, p_offset: offset })
+        if (!legacyErr && Array.isArray(legacyRows) && legacyRows.length) {
+          let profiles: CardProfile[] = legacyRows
+            .filter((r: any) => r.candidate_id !== user.id)
+            .map((r: any) => ({
+              id: r.candidate_id,
+              name: r.display_name ?? 'Usuario',
+              age: typeof r.calculated_age === 'number' ? r.calculated_age : null,
+              bio: null,
+              interests: [],
+              avatar: normalizeAvatarUrl(r.avatar_url || null),
+              gender: (r.gender ?? null),
+              interested_in: Array.isArray(r.interested_in) ? r.interested_in : [],
+              seeking: Array.isArray(r.seeking) ? r.seeking : [],
+              photos: Array.isArray((r as any).photos)
+                ? (r as any).photos
+                    .map((x: any) => {
+                      const url = normalizeAvatarUrl(String(x.url || ''))
+                      return url ? { id: Number(x.id), url, sort_order: Number(x.sort_order ?? 0) } : null
+                    })
+                    .filter(Boolean) as { id: number; url: string; sort_order: number }[]
+                : [],
+              prompts: [],
+              distanceKm: (typeof (r as any).distance_km === 'number' ? (r as any).distance_km : null),
+              photosVersion: null
+            }))
+          const idsAll = profiles.map(p => p.id)
+          const { data: boosters } = await supabase
+            .from('likes')
+            .select('liker')
+            .eq('liked', user!.id)
+            .eq('type', 'superlike')
+          const boostSet = new Set<string>((boosters || []).map(b => (b as any).liker).filter((id: string) => idsAll.includes(id)))
+          try {
+            if (idsAll.length) {
+              const { data: biosRows } = await supabase
+                .rpc('profile_bios_bulk', { p_ids: idsAll })
+              const bioMap = new Map<string, string | null>()
+              ;(biosRows || []).forEach((r: any) => { if (r?.profile_id) bioMap.set(r.profile_id, r.bio ?? null) })
+              profiles = profiles.map(p => ({ ...p, bio: bioMap.get(p.id) ?? null }))
+            }
+          } catch {}
+          try {
+            if (idsAll.length) {
+              const { data: interestRows } = await supabase
+                .rpc('profile_interests_bulk', { p_ids: idsAll })
+              const interestsMap = new Map<string, string[]>()
+              ;(interestRows || []).forEach((r: any) => { if (r?.profile_id) interestsMap.set(r.profile_id, Array.isArray(r.interests) ? r.interests : []) })
+              profiles = profiles.map(p => ({ ...p, interests: interestsMap.get(p.id) || [] }))
+            }
+          } catch {}
+          try {
+            if (idsAll.length) {
+              const { data: promptRows } = await supabase
+                .rpc('profile_prompts_bulk', { p_ids: idsAll, p_locale: i18n.language || 'es' })
+              const promptsMap = new Map<string, any[]>()
+              ;(promptRows || []).forEach((r: any) => {
+                if (!r?.profile_id) return
+                const arr = promptsMap.get(r.profile_id) || []
+                arr.push({ id: r.prompt_id, prompt_id: r.prompt_id, key: r.key, question: r.question || null, response: r.answer, choices_labels: r.choices_labels || null, icon: r.icon || null })
+                promptsMap.set(r.profile_id, arr)
+              })
+              promptsMap.forEach((arr, k) => promptsMap.set(k, arr.sort((a,b)=> a.prompt_id - b.prompt_id)))
+              profiles = profiles.map(p => ({ ...p, prompts: promptsMap.get(p.id) || [] }))
+            }
+          } catch {}
+          const boostersList = profiles.filter(p => boostSet.has(p.id))
+          const others = profiles.filter(p => !boostSet.has(p.id))
+          const collator = new Intl.Collator('es', { sensitivity:'base' })
+          const sorter = (a: CardProfile, b: CardProfile) => {
+            const na = a.name || ''
+            const nb = b.name || ''
+            const primary = collator.compare(na, nb)
+            if (primary !== 0) return primary
+            return a.id.localeCompare(b.id)
+          }
+          boostersList.sort(sorter)
+          others.sort(sorter)
+          let myInterests: string[] = []
+          try {
+            const { data: myRows } = await supabase
+              .from('profile_interests')
+              .select('interests(name)')
+              .eq('profile_id', user!.id)
+            ;(myRows || []).forEach((r: any) => { const n = r.interests?.name; if (typeof n === 'string' && n.length) myInterests.push(n) })
+            myInterests = Array.from(new Set(myInterests))
+          } catch {}
+          return { profiles: [...boostersList, ...others], boostSet, myInterests, usedRpc: true }
+        }
+      } catch {}
+
+      // Fallback path final: legacy simple RPC + client-side profile fetch (may be blocked by RLS)
       const { data: candRows, error: candErr } = await supabase
-        .rpc('classic_candidates_simple', { p_user_id: user.id, p_limit: 200 })
+  .rpc('classic_candidates_simple', { p_user_id: user.id, p_limit: PAGE_SIZE })
       if (candErr) console.warn('[classic] rpc error', candErr.message)
       const ids = (candRows || []).map((r: any) => r.candidate_id).filter((id: string) => id !== user!.id)
-      if (!ids.length) return { profiles: [], boostSet: new Set(), myInterests: [] }
+  if (!ids.length) return { profiles: [], boostSet: new Set(), myInterests: [], usedRpc: false }
 
       const normalizeLabel = (raw?: string | null): string | null => {
         if (!raw) return null
@@ -190,39 +400,9 @@ export default function ClassicSwipeScreen() {
         return Array.from(new Set(arr.map(a => normalizeLabel(a)).filter(Boolean) as string[]))
       }
 
-      // Expand legacy orientation codes to target genders for compatibility
-      const expandInterested = (list: string[], selfGender: string | null): string[] => {
-        if (!list || list.length === 0) return []
-        if (list.includes('*')) return ['*']
-        const out = new Set<string>()
-        const add = (x?: string | null) => { if (!x) return; if (x === 'nonbinary') out.add('other'); else out.add(x) }
-        for (const raw of list) {
-          const v = (raw || '').toLowerCase()
-          if (v === '*' || v === 'everyone' || v === 'all' || v === 'cualquiera' || v === 'todos' || v === 'todas' || v === 'any') { out.add('*'); continue }
-          if (v === 'male' || v === 'hombre' || v === 'hombres' || v === 'm') { out.add('male'); continue }
-          if (v === 'female' || v === 'mujer' || v === 'mujeres' || v === 'f') { out.add('female'); continue }
-          if (v === 'other' || v === 'nonbinary' || v === 'no binario' || v === 'nb') { out.add('other'); continue }
-          if (v === 'bi' || v === 'bisexual') { out.add('male'); out.add('female'); continue }
-          if (v === 'straight' || v === 'hetero' || v === 'heterosexual') {
-            if (selfGender === 'male') add('female')
-            else if (selfGender === 'female') add('male')
-            else out.add('*')
-            continue
-          }
-          if (v === 'gay') {
-            if (selfGender === 'male') add('male')
-            else if (selfGender === 'female') add('female')
-            else out.add('*')
-            continue
-          }
-          if (v === 'lesbian' || v === 'lesbiana') { add('female'); continue }
-        }
-        return Array.from(out)
-      }
-
       const { data: profsIn, error: profsErr } = await supabase
         .from('profiles')
-        .select('id, display_name, calculated_age, gender, avatar_url, interested_in, seeking')
+        .select('id, display_name, bio, calculated_age, gender, avatar_url, interested_in, seeking')
         .in('id', ids)
       if (profsErr) console.warn('[classic] profiles .in error', profsErr.message)
       let profilesSource: ProfileRow[] = profsIn || []
@@ -231,7 +411,7 @@ export default function ClassicSwipeScreen() {
         for (const id of ids) {
           const { data: one } = await supabase
             .from('profiles')
-            .select('id, display_name, calculated_age, gender, avatar_url, interested_in, seeking')
+            .select('id, display_name, bio, calculated_age, gender, avatar_url, interested_in, seeking')
             .eq('id', id)
             .maybeSingle()
           if (one) fallback.push(one as ProfileRow)
@@ -249,17 +429,29 @@ export default function ClassicSwipeScreen() {
         ;(photosRows || []).forEach((r: any) => {
           if (!r.user_id) return
           const arr = photosMap.get(r.user_id) || []
-          arr.push({ id: r.id, url: r.url, sort_order: r.sort_order ?? 0 })
+          const normalized = normalizeAvatarUrl(r.url || null)
+          if (normalized) arr.push({ id: r.id, url: normalized, sort_order: r.sort_order ?? 0 })
           photosMap.set(r.user_id, arr)
         })
         photosMap.forEach((arr, k) => photosMap.set(k, arr.sort((a,b)=> (a.sort_order??0)-(b.sort_order??0))))
       }
 
-      let promptsMap = new Map<string, { id: number; prompt_id: number; question?: string; response: any; key?: string; choices_labels?: Record<string,string>|null }[]>()
+      // Distances via RPC for fallback path as well
+      let distMap = new Map<string, number | null>()
+      try {
+        if (profilesSource.length) {
+          const idsAll = profilesSource.map(p => p.id)
+          const { data: distRows } = await supabase
+            .rpc('profile_distance_bulk', { p_viewer: user!.id, p_ids: idsAll })
+          ;(distRows || []).forEach((r: any) => { if (r?.profile_id) distMap.set(r.profile_id, (typeof r.distance_km === 'number' ? r.distance_km : null)) })
+        }
+      } catch {}
+
+  let promptsMap = new Map<string, { id: number; prompt_id: number; question?: string; response: any; key?: string; choices_labels?: Record<string,string>|null; icon?: string | null }[]>()
       if (profilesSource.length) {
         const { data: promptsRows, error: promErr } = await supabase
           .from('profile_prompts')
-          .select('id, prompt_id, answer, profile_id, profile_prompt_templates(question, key, profile_prompt_template_locales(locale,title,choices_labels))')
+          .select('id, prompt_id, answer, profile_id, profile_prompt_templates(question, key, icon, profile_prompt_template_locales(locale,title,choices_labels))')
           .in('profile_id', profilesSource.map(p => p.id))
         if (promErr) console.warn('[classic] prompts error', promErr.message)
         function parseArrayLike(val: any): any {
@@ -276,44 +468,37 @@ export default function ClassicSwipeScreen() {
           }
           return val
         }
+        const localeChain = getLocaleChain(i18n.language)
         ;(promptsRows || []).forEach((r: any) => {
           const arr = promptsMap.get(r.profile_id) || []
           let resp = r.answer ?? ''
           resp = parseArrayLike(resp)
-          let localizedQ: string | undefined = undefined
-          let choicesLabels: Record<string,string>|null = null
-          const locales = r.profile_prompt_templates?.profile_prompt_template_locales
-          if (Array.isArray(locales)) {
-            const es = locales.find((l: any) => l?.locale === 'es')
-            if (es?.title) localizedQ = es.title
-            if (es?.choices_labels && typeof es.choices_labels === 'object') choicesLabels = es.choices_labels
-            if (!localizedQ) {
-              const en = locales.find((l:any)=> l?.locale==='en' && l.title)
-              if (en?.title) localizedQ = en.title
-              if (!choicesLabels && en?.choices_labels && typeof en.choices_labels === 'object') choicesLabels = en.choices_labels
-            }
-          }
-          arr.push({ id: r.id, prompt_id: r.prompt_id, question: localizedQ || r.profile_prompt_templates?.question, response: resp, key: r.profile_prompt_templates?.key, choices_labels: choicesLabels })
+          const locales = r.profile_prompt_templates?.profile_prompt_template_locales || []
+          const locByLocale = Object.fromEntries(locales.map((row: any) => [row.locale, row]))
+          const localizedQ = pickFirstNonEmptyTitle(locByLocale, localeChain) || r.profile_prompt_templates?.question
+          const choicesLabels = mergeChoiceLabels(locByLocale, localeChain)
+          arr.push({ id: r.id, prompt_id: r.prompt_id, question: localizedQ, response: resp, key: r.profile_prompt_templates?.key, choices_labels: choicesLabels, icon: r.profile_prompt_templates?.icon || null })
           promptsMap.set(r.profile_id, arr)
         })
         promptsMap.forEach((arr, k) => promptsMap.set(k, arr.sort((a,b)=> a.prompt_id - b.prompt_id)))
       }
 
-      const { data: interestRows, error: intErr } = await supabase
-        .from('profile_interests')
-        .select('profile_id, interests(name)')
-        .in('profile_id', ids)
-      if (intErr) console.warn('[classic] interests error', intErr.message)
+      // Interests for candidates via RPC to avoid RLS
       const interestsMap = new Map<string, string[]>()
-      ;(interestRows || []).forEach((r: any) => {
-        const name = r.interests?.name
-        if (typeof name === 'string' && name.length > 0) {
-          const arr = interestsMap.get(r.profile_id) || []
-          arr.push(name)
-          interestsMap.set(r.profile_id, arr)
+      try {
+        if (ids.length) {
+          const { data: interestRows, error: intErr } = await supabase
+            .rpc('profile_interests_bulk', { p_ids: ids })
+          if (intErr) console.warn('[classic] interests rpc error', intErr.message)
+          ;(interestRows || []).forEach((r: any) => {
+            if (!r) return
+            const arr = Array.isArray(r.interests) ? r.interests : []
+            interestsMap.set(r.profile_id, arr)
+          })
         }
-      })
-      interestsMap.forEach((arr, k) => interestsMap.set(k, Array.from(new Set(arr))))
+      } catch (e: any) {
+        console.warn('[classic] interests rpc exception', e?.message)
+      }
 
       let myInterests: string[] = []
       try {
@@ -325,44 +510,34 @@ export default function ClassicSwipeScreen() {
         myInterests = Array.from(new Set(myInterests))
       } catch {}
 
+      // Bios via RPC (in case direct select was blocked by RLS or returned nulls)
+      let bioMap = new Map<string, string | null>()
+      try {
+        if (profilesSource.length) {
+          const idsAll = profilesSource.map(p => p.id)
+          const { data: biosRows } = await supabase
+            .rpc('profile_bios_bulk', { p_ids: idsAll })
+          ;(biosRows || []).forEach((r: any) => { if (r?.profile_id) bioMap.set(r.profile_id, r.bio ?? null) })
+        }
+      } catch {}
+
       const profiles: CardProfile[] = (profilesSource || []).map((p: ProfileRow) => ({
         id: p.id,
         name: p.display_name ?? 'Usuario',
         age: typeof p.calculated_age === 'number' ? p.calculated_age : null,
-        interests: (interestsMap.get(p.id) || []).slice(0, 6),
-        avatar: p.avatar_url || null,
+        bio: (bioMap.get(p.id) ?? p.bio ?? null),
+  interests: (interestsMap.get(p.id) || []),
+        avatar: normalizeAvatarUrl(p.avatar_url || null),
         gender: normalizeLabel(p.gender) || null,
         interested_in: normalizeArr(p.interested_in),
         seeking: normalizeArr(p.seeking),
         photos: photosMap.get(p.id) || [],
-        prompts: promptsMap.get(p.id) || []
+        prompts: promptsMap.get(p.id) || [],
+        distanceKm: distMap.get(p.id) ?? null
       }))
 
-      const { data: meProfileRaw } = await supabase
-        .from('profiles')
-        .select('gender, interested_in, seeking')
-        .eq('id', user!.id)
-        .maybeSingle()
-  const gMe = normalizeLabel(meProfileRaw?.gender as string | null)
-  const myInterestedInRaw: string[] = normalizeArr(meProfileRaw?.interested_in as any)
-  const myInterestedIn = expandInterested(myInterestedInRaw, gMe)
-
-      const wants = (list: string[], other: string | null): boolean => {
-        if (!other) return true
-        if (!list.length) return true
-        if (list.includes('*')) return true
-        return list.includes(other)
-      }
-      const hasMutual = (p: CardProfile): boolean => {
-        const gOther = p.gender
-        if (!gMe || !gOther) return true
-        const otherTargets = expandInterested(p.interested_in || [], gOther)
-        const iWant = wants(myInterestedIn, gOther)
-        const otherWants = wants(otherTargets, gMe)
-        return iWant && otherWants
-      }
-
-      const pending = profiles.filter(p => hasMutual(p))
+      // Servidor ya filtra edad/orientación/distancia: no aplicar filtros redundantes aquí
+      const pending = profiles
 
       // Boosters: who gave me superlike (any context)
       const { data: boosters } = await supabase
@@ -385,34 +560,64 @@ export default function ClassicSwipeScreen() {
       boostersList.sort(sorter)
       others.sort(sorter)
       const ordered = [...boostersList, ...others]
-      return { profiles: ordered, boostSet, myInterests }
+      return { profiles: ordered, boostSet, myInterests, usedRpc: false }
     }
   })
 
-  const swipeData: SwipeQueryResult | undefined = data as SwipeQueryResult | undefined
-  const deck = swipeData?.profiles || []
+  const pages = data?.pages || []
+  const deck = pages.flatMap(p => p.profiles) || []
+  const viewerInterests = useMemo(() => {
+    // Take from the first page; it's the same for all pages in this session
+    return pages.length ? (pages[0]?.myInterests || []) : []
+  }, [pages])
+  const boostSetGlobal = useMemo(() => {
+    const s = new Set<string>()
+    for (const pg of pages) { if (pg?.boostSet) { pg.boostSet.forEach(id => s.add(id)) } }
+    return s
+  }, [pages])
 
   const [uiDeck, setUiDeck] = useState<CardProfile[]>([])
   const decidedRef = useRef<Set<string>>(new Set())
   // Reset/reconcile deck when backend candidates change (prevents stale cards after location change)
   useEffect(() => {
     if (!deck) { setUiDeck([]); return }
-    const next = deck.filter(p => !decidedRef.current.has(p.id))
-    setUiDeck(next)
+    decidedRef.current.clear()
+    setUiDeck(deck)
   }, [deck.map(p=>p.id).join('|')])
 
-  // If location changes, clear UI deck immediately to avoid flashing old candidates
+  // Auto-refill: si quedan pocas cartas y hay más páginas, pedir siguiente
   useEffect(() => {
-    // myLoc drives queryKey, but clear UI eagerly for UX
-    if (typeof myLoc?.lat === 'number' && typeof myLoc?.lng === 'number') {
-      setUiDeck([])
-    }
-  }, [myLoc?.lat, myLoc?.lng])
+    if (!hasNextPage) return
+    if (uiDeck.length <= 5) { try { fetchNextPage() } catch {} }
+  }, [uiDeck.length, hasNextPage, fetchNextPage])
+
+  // Eliminamos el vaciado agresivo del deck al cambiar la ubicación porque provocaba deck vacío permanente
+  // (IDs iguales tras refetch ⇒ efecto de repoblado no se disparaba). El queryKey ya fuerza refetch y el efecto
+  // siguiente repuebla cuando cambia el contenido real.
 
   const current = uiDeck[0]
   const next = uiDeck[1]
+  const onlineSet = useOnlineIds(current?.id ? [current.id] : [])
+  const onlineLabel = (i18n.language || '').toLowerCase().startsWith('es') ? 'En línea' : 'Online'
   const [photoIndex, setPhotoIndex] = useState(0)
   useEffect(()=>{ setPhotoIndex(0) }, [current?.id])
+  // Simplified image swap: single image keyed by photo id (stable pattern from prior working version)
+  const [imgLoaded, setImgLoaded] = useState(false)
+  const currentUri = useMemo(() => (current?.photos?.[photoIndex]?.url || current?.avatar || null), [current?.id, photoIndex])
+  const suppressRefetchSV = useSharedValue(0)
+  const deferRefetchTimerRef = useRef<any>(null)
+  const requestRefetch = useCallback(() => {
+    if (!suppressRefetchSV.value) {
+      try { refetch() } catch {}
+      return
+    }
+    if (deferRefetchTimerRef.current) { try { clearTimeout(deferRefetchTimerRef.current) } catch {} }
+    deferRefetchTimerRef.current = setTimeout(() => {
+      suppressRefetchSV.value = 0
+      try { refetch() } catch {}
+    }, 800)
+  }, [refetch])
+  useEffect(() => { setImgLoaded(false) }, [current?.id, photoIndex])
   const isDraggingRef = useRef(false)
   const gestureModeRef = useRef<'undecided' | 'photo' | 'card'>('undecided')
   const startXRef = useRef<number | null>(null)
@@ -421,8 +626,9 @@ export default function ClassicSwipeScreen() {
   const photoAutoProgress = useSharedValue(0)
   const pauseRef = useRef(false)
   const startTsRef = useRef(0)
-  const totalDurationRef = useRef(AUTO_ADVANCE_INTERVAL_MS)
-  const remainingRef = useRef(AUTO_ADVANCE_INTERVAL_MS)
+  const totalDurationRef = useRef<number>(AUTO_ADVANCE_INTERVAL_MS)
+  const remainingRef = useRef<number>(AUTO_ADVANCE_INTERVAL_MS)
+  const lastEndTsRef = useRef(0)
 
   const launchProgress = useCallback(() => {
     cancelAnimation(photoAutoProgress)
@@ -529,7 +735,7 @@ export default function ClassicSwipeScreen() {
         const { matched, matchId } = await ensureMatchConsistency(user.id, targetId)
         if (matched && matchId != null) setMatch({ targetId, matchId })
       }
-      qc.invalidateQueries({ queryKey: ['classic-swipe-profiles', user?.id] })
+  qc.invalidateQueries({ queryKey: ['classic-swipe-profiles-v2', user?.id] })
       // Cross-context: refrescar cualquier feed de evento abierto para excluir al usuario recién decidido
       qc.invalidateQueries({ queryKey: ['event-swipe-profiles'] })
       // Actualizar contadores/listas derivadas del feed (si están en uso)
@@ -548,9 +754,9 @@ export default function ClassicSwipeScreen() {
   }, [user, remaining])
 
   useEffect(() => {
-    const id = setInterval(() => { refetch(); refetchRemaining() }, 45000)
+    const id = setInterval(() => { requestRefetch(); refetchRemaining() }, 45000)
     return () => clearInterval(id)
-  }, [refetch, refetchRemaining])
+  }, [requestRefetch, refetchRemaining])
 
   // Realtime: refetch when my profile location changes while Classic is open
   useEffect(() => {
@@ -560,11 +766,29 @@ export default function ClassicSwipeScreen() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'profile_locations', filter: `user_id=eq.${user.id}` },
-        () => { try { refetch() } catch {} }
+        () => { requestRefetch() }
       )
       .subscribe()
     return () => { try { supabase.removeChannel(ch) } catch {} }
-  }, [user?.id, refetch])
+  }, [user?.id, requestRefetch])
+
+  // Realtime: refresh deck when any profile/avatar or photo gets updated while Classic is open
+  useEffect(() => {
+    const ch = supabase
+      .channel('classic-photos-profiles-rt')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'user_photos' },
+        () => { requestRefetch() }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles' },
+        () => { requestRefetch() }
+      )
+      .subscribe()
+    return () => { try { supabase.removeChannel(ch) } catch {} }
+  }, [requestRefetch])
 
   const cardStyle = useAnimatedStyle(() => {
     const rawAngle = translateX.value / 18
@@ -585,6 +809,20 @@ export default function ClassicSwipeScreen() {
     opacity: superProgress.value,
     transform: [ { scale: 0.8 + superProgress.value * 0.6 } ]
   }))
+
+  // Next card appears from bottom as you drag the current one
+  const NEXT_CARD_OFFSET_Y = 26
+  const NEXT_CARD_SCALE_MIN = 0.96
+  const nextCardStyle = useAnimatedStyle(() => {
+    const pX = Math.min(1, Math.abs(translateX.value) / SWIPE_THRESHOLD_X)
+    const pY = Math.min(1, Math.max(0, -translateY.value) / SWIPE_THRESHOLD_Y)
+    const p = Math.max(pX, pY)
+    const ty = NEXT_CARD_OFFSET_Y * (1 - p)
+    const sc = NEXT_CARD_SCALE_MIN + (1 - NEXT_CARD_SCALE_MIN) * p
+    // Hide the next card completely until the user starts interacting
+    const op = p
+    return { transform: [{ translateY: ty }, { scale: sc }], opacity: op }
+  })
 
   const particles = useMemo(() => Array.from({ length: SUPERLIKE_PARTICLES }).map((_, i) => ({
     id: i,
@@ -609,9 +847,25 @@ export default function ClassicSwipeScreen() {
     }
   }))
 
+  // Debug event log (kept small, only if flag enabled)
+  const [debugEvents, setDebugEvents] = useState<string[]>([])
+  const pushDebug = useCallback((msg: string) => {
+    if (!DEBUG_PHOTO) return
+    setDebugEvents(ev => {
+      const next = [...ev, `${Date.now()%100000}:${msg}`]
+      return next.slice(-60)
+    })
+    if (__DEV__) console.log('[swipe-debug]', msg)
+  }, [DEBUG_PHOTO])
+
   const onEnd = ({ nativeEvent }: any) => {
+    // micro-debounce to avoid spurious double end events
+    const now = Date.now()
+    if (now - (lastEndTsRef.current || 0) < 80) return
+    lastEndTsRef.current = now
     const { translationX, translationY } = nativeEvent
     isDraggingRef.current = false
+  setTimeout(() => { suppressRefetchSV.value = 0 }, 120)
     const mode = gestureModeRef.current
     if (translationY < -SWIPE_THRESHOLD_Y && current) {
       translateY.value = withTiming(-height, { duration:250 }, () => runOnJS(performAction)(current.id, 'superlike'))
@@ -621,9 +875,18 @@ export default function ClassicSwipeScreen() {
       return
     }
     if (mode === 'card') {
-      if (translationX > SWIPE_THRESHOLD_X && current) { translateX.value = withTiming(width * 1.2, { duration:220 }, () => runOnJS(performAction)(current.id, 'like')) } 
-      else if (translationX < -SWIPE_THRESHOLD_X && current) { translateX.value = withTiming(-width * 1.2, { duration:220 }, () => runOnJS(performAction)(current.id, 'pass')) } 
-      else { resetCard() }
+      const SOFT_X = SWIPE_THRESHOLD_X * 0.7
+      if (translationX > SWIPE_THRESHOLD_X && current) {
+        translateX.value = withTiming(width * 1.2, { duration:220 }, () => runOnJS(performAction)(current.id, 'like'))
+      } else if (translationX < -SWIPE_THRESHOLD_X && current) {
+        translateX.value = withTiming(-width * 1.2, { duration:220 }, () => runOnJS(performAction)(current.id, 'pass'))
+      } else if (translationX > SOFT_X && current) {
+        translateX.value = withTiming(width * 1.2, { duration:220 }, () => runOnJS(performAction)(current.id, 'like'))
+      } else if (translationX < -SOFT_X && current) {
+        translateX.value = withTiming(-width * 1.2, { duration:220 }, () => runOnJS(performAction)(current.id, 'pass'))
+      } else {
+        resetCard()
+      }
     } else {
       resetCard()
     }
@@ -635,6 +898,9 @@ export default function ClassicSwipeScreen() {
     const { translationX, translationY, x } = evt.nativeEvent
     if (!isDraggingRef.current && (Math.abs(translationX) > 6 || Math.abs(translationY) > 6)) {
       isDraggingRef.current = true
+  // Avoid refetches while user is actively dragging to reduce flicker
+  suppressRefetchSV.value = 1
+      pushDebug('drag-start')
     }
     const photosLen = current?.photos?.length || 0
     if (startXRef.current == null && typeof x === 'number') startXRef.current = x
@@ -647,9 +913,12 @@ export default function ClassicSwipeScreen() {
         gestureModeRef.current = inEdge ? 'photo' : 'card'
         if (gestureModeRef.current === 'photo') {
           lastPhotoCommitRef.current = 0
+          suppressRefetchSV.value = 1
+          pushDebug('mode:photo')
         }
       } else {
         gestureModeRef.current = 'card'
+        pushDebug('mode:card')
       }
     }
     if (gestureModeRef.current === 'photo') {
@@ -657,6 +926,7 @@ export default function ClassicSwipeScreen() {
         gestureModeRef.current = 'card'
         translateX.value = translationX
         translateY.value = translationY
+        pushDebug('promote->card')
         return
       }
       const delta = translationX - lastPhotoCommitRef.current
@@ -667,6 +937,7 @@ export default function ClassicSwipeScreen() {
         })
         lastPhotoCommitRef.current = translationX
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(()=>{})
+        pushDebug('photo-back')
       } else if (delta < -PHOTO_SWIPE_DISTANCE) {
         setPhotoIndex(idx => {
           const nextIdx = idx + 1
@@ -674,13 +945,14 @@ export default function ClassicSwipeScreen() {
         })
         lastPhotoCommitRef.current = translationX
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(()=>{})
+        pushDebug('photo-forward')
       }
       translateX.value = 0; translateY.value = 0
       return
     }
     translateX.value = translationX; translateY.value = translationY
-    superProgress.value = translationY < 0 ? Math.min(1, Math.abs(translationY) / SWIPE_THRESHOLD_Y) : 0
-  }, [current?.photos?.length])
+    superProgress.value = translationY < -SUPERLIKE_ACTIVATION_Y ? Math.min(1, Math.abs(translationY) / SWIPE_THRESHOLD_Y) : 0
+  }, [current?.photos?.length, pushDebug])
 
   const PROMPT_Q_MAP: Record<string,string> = {
     'Describe your personality':'Describe tu personalidad',
@@ -723,28 +995,65 @@ export default function ClassicSwipeScreen() {
     }
     return arr
   }, [current?.id, current?.prompts])
-  const currentPrompt = (photoIndex < promptOrder.length) ? promptOrder[photoIndex] : null
-  const renderSinglePrompt = () => {
-    if (!currentPrompt) return null
-    const respRaw = currentPrompt.response
+
+  // Priority: languages > array prompts > others. Use stable sort over seeded order above.
+  const prioritizedPrompts = useMemo(() => {
+    const isArrayPrompt = (p: any) => Array.isArray(p?.response)
+    const isLanguagesKey = (k: string) => {
+      const key = k.toLowerCase()
+      // Lista blanca de keys para Idiomas (ajusta si tu template usa otra clave estable)
+      const LANGUAGE_KEYS = new Set(['languages', 'idiomas', 'languagespoken', 'idiomashablados', 'lang', 'langs'])
+      if (LANGUAGE_KEYS.has(key)) return true
+      return key.includes('language') || key.includes('idioma') || key.includes('idiom') || key.includes('lang')
+    }
+    const isLikelyLanguages = (p: any) => {
+      const k = String(p?.key || '')
+      if (k && isLanguagesKey(k)) return true
+      // Fallback por texto de pregunta (EN/ES)
+      const q = String(p?.question || '').toLowerCase()
+      if (q.includes('idiomas') || q.includes('lengu') || q.includes('languages') || q.includes('speak')) return true
+      // Fallback por forma de respuesta: array con valores tipo idioma
+      const resp = p?.response
+      if (Array.isArray(resp) && resp.length) {
+        const SAMPLE_LANGS = ['es', 'en', 'fr', 'de', 'it', 'pt', 'chino', 'chinese', 'inglés', 'español', 'francés']
+        const s = String(resp[0] || '').toLowerCase()
+        if (SAMPLE_LANGS.some(w => s.includes(w))) return true
+      }
+      return false
+    }
+    const score = (p: any) => (isLikelyLanguages(p) ? 3 : isArrayPrompt(p) ? 2 : 1)
+    const base = [...promptOrder]
+    base.sort((a, b) => score(b) - score(a))
+    return base
+  }, [promptOrder])
+  // Two prompts per photo starting at photo index 2 (3rd visual card). No compact grouping.
+  const promptSlots = useMemo(() => Math.max(0, (current?.photos?.length || 0) - 2), [current?.photos?.length])
+  const visiblePrompts = useMemo(() => prioritizedPrompts.slice(0, promptSlots * 2), [prioritizedPrompts, promptSlots])
+
+  const renderSinglePrompt = (p: any) => {
+    if (!p) return null
+    const respRaw = p.response
     const isArray = Array.isArray(respRaw)
-    const answerText = !isArray ? tAnswer(String(respRaw).trim(), (currentPrompt as any).choices_labels) : ''
+    const answerText = !isArray ? tAnswer(String(respRaw).trim(), (p as any).choices_labels) : ''
     return (
       <View style={{ marginTop:8, alignSelf:'flex-start', maxWidth:'92%' }}>
-        {currentPrompt.question && (
+        {p.question && (
           <Text style={{ color:'#fff', fontSize:12, fontWeight:'700', opacity:0.9, marginBottom:4 }} numberOfLines={2}>
-            {tPromptQ(currentPrompt.question, (currentPrompt as any).key)}
+            {prefixIcon(
+              tPromptQ(p.question, (p as any).key),
+              (p as any).icon as string | undefined
+            )}
           </Text>
         )}
         {isArray ? (
           <View style={{ flexDirection:'row', flexWrap:'wrap', gap:6 }}>
             {respRaw.slice(0,6).map((opt: any, i: number) => (
-              <View key={i} style={{ backgroundColor:'rgba(0,0,0,0.45)', paddingHorizontal:10, paddingVertical:5, borderRadius:14 }}>
-                <Text style={{ color:'#fff', fontSize:11.5, fontWeight:'600' }} numberOfLines={1}>{tAnswer(opt, (currentPrompt as any).choices_labels)}</Text>
+              <View key={i} style={{ backgroundColor:'rgba(255,255,255,0.12)', borderWidth:1, borderColor:'rgba(255,255,255,0.18)', paddingHorizontal:10, paddingVertical:5, borderRadius:14 }}>
+                <Text style={{ color:'#fff', fontSize:11.5, fontWeight:'600' }} numberOfLines={1}>{tAnswer(opt, (p as any).choices_labels)}</Text>
               </View>
             ))}
             {respRaw.length > 6 && (
-              <View style={{ backgroundColor:'rgba(0,0,0,0.45)', paddingHorizontal:10, paddingVertical:5, borderRadius:14 }}>
+              <View style={{ backgroundColor:'rgba(255,255,255,0.12)', borderWidth:1, borderColor:'rgba(255,255,255,0.18)', paddingHorizontal:10, paddingVertical:5, borderRadius:14 }}>
                 <Text style={{ color:'#fff', fontSize:11.5, fontWeight:'600' }}>+{respRaw.length-6}</Text>
               </View>
             )}
@@ -756,10 +1065,53 @@ export default function ClassicSwipeScreen() {
     )
   }
 
+
+  // Full interest list (server already enforces per-category limit of 2). We still highlight common ones.
+  const interestChips = useMemo(() => {
+    const ui: string[] = Array.isArray(current?.interests) ? current!.interests : []
+    return ui
+  }, [current?.id, current?.interests])
+
+  // Compute one-line bio (grapheme-safe truncation)
+  const bioLine = useMemo(() => {
+    const raw = (current?.bio || '').trim()
+    if (!raw) return null
+    return truncateByGraphemes(raw, 90)
+  }, [current?.id, current?.bio])
+
+  // Compute prompt highlights (emoji + short label) to fill if interests < 3
+  const promptHighlights = useMemo(() => {
+    const maxNeeded = Math.min(2, Math.max(0, 3 - (interestChips?.length || 0)))
+    if (!current?.prompts || maxNeeded <= 0) return [] as string[]
+    // Prefer choice prompts (array answers), take first option
+    const makeLabel = (p: any): string | null => {
+      const emoji = (p?.icon as string) || '✨'
+      const resp = p?.response
+      if (Array.isArray(resp) && resp.length > 0) {
+        const raw = resp[0]
+        const label = tAnswer(raw, p?.choices_labels)
+        const txt = String(label || '').trim()
+        if (!txt) return null
+        const pretty = txt.length > 18 ? `${txt.slice(0,16)}…` : txt
+        return `${emoji} ${pretty}`
+      }
+      // Skip long free-text here to keep pills short
+      return null
+    }
+    const all = (current.prompts || [])
+      .map(makeLabel)
+      .filter((s: any): s is string => typeof s === 'string' && s.length > 0)
+    // Deduplicate preserving order
+    const seen = new Set<string>()
+    const uniq = [] as string[]
+    for (const s of all) { if (!seen.has(s)) { seen.add(s); uniq.push(s) } }
+    return uniq.slice(0, maxNeeded)
+  }, [current?.id, current?.prompts, interestChips])
+
   const boosterTipShownRef = useRef(false)
   const [showBoosterTip, setShowBoosterTip] = useState(false)
   useEffect(() => {
-    if (current && swipeData?.boostSet?.has(current.id) && !boosterTipShownRef.current) {
+    if (current && boostSetGlobal.has(current.id) && !boosterTipShownRef.current) {
       boosterTipShownRef.current = true
       setShowBoosterTip(true)
       const t = setTimeout(()=> setShowBoosterTip(false), 3200)
@@ -767,7 +1119,7 @@ export default function ClassicSwipeScreen() {
     } else if (!current) {
       setShowBoosterTip(false)
     }
-  }, [current?.id, (data as any)?.boostSet])
+  }, [current?.id, boostSetGlobal])
 
   const [tutorialVisible, setTutorialVisible] = useState(false)
   const tutorialVisibleRef = useRef(false)
@@ -814,7 +1166,7 @@ export default function ClassicSwipeScreen() {
   }
 
   return (
-    <Screen style={{ padding:0 }}>
+    <Screen style={{ padding:0 }} edges={[]}> 
       {/* Realtime: refetch when my profile location changes */}
       {/* This ensures immediate refresh if location is updated while Classic is open */}
       {isLoading && (
@@ -824,27 +1176,82 @@ export default function ClassicSwipeScreen() {
       )}
       {!isLoading && !current && <EmptyState />}
       {!isLoading && current && (
-        <View style={{ flex:1, alignItems:'center', paddingTop: CARD_TOP_PADDING, paddingBottom: ACTION_BAR_SPACER }}>
-          {next && (
-            <View pointerEvents='none' style={{ position:'absolute', top: CARD_TOP_PADDING, width:CARD_WIDTH, height:CARD_HEIGHT, borderRadius:24, overflow:'hidden', backgroundColor: theme.colors.card, opacity:0.4 }} />
+        <View style={{ flex:1, alignItems:'stretch', padding: OUTER_INSET }}>
+          {process.env.EXPO_PUBLIC_SWIPE_DEBUG === '1' && pages.length > 0 && !pages[0].usedRpc && (
+            <View style={{ position:'absolute', top:4, left:4, zIndex:20, backgroundColor:'#c53030', paddingHorizontal:10, paddingVertical:6, borderRadius:8 }}>
+              <Text style={{ color:'#fff', fontSize:11, fontWeight:'700' }}>FALLBACK RPC</Text>
+            </View>
+          )}
+          {next && imgLoaded && (
+            <Animated.View pointerEvents='none' style={[{ position:'absolute', top: 0, left:0, right:0, bottom: 0, borderRadius:24, overflow:'hidden', backgroundColor: theme.colors.card }, nextCardStyle]}>
+              {next.photos && next.photos.length > 0 ? (
+                <Image
+                  key={`next:${next.id}:${next.photos[0]?.id ?? 'av'}`}
+                  source={{ uri: next.photos[0]?.url || next.avatar || '' }}
+                  style={{ flex:1 }}
+                  resizeMode='cover'
+                  fadeDuration={0}
+                />
+              ) : next.avatar ? (
+                <Image key={`next:${next.id}:avatar`} source={{ uri: next.avatar }} style={{ flex:1 }} resizeMode='cover' fadeDuration={0} />
+              ) : (
+                <View style={{ flex:1, backgroundColor: theme.colors.border }} />
+              )}
+            </Animated.View>
           )}
           <PanGestureHandler onGestureEvent={handleGestureEvent} onEnded={onEnd}>
-            <Animated.View style={[{ width:CARD_WIDTH, height:CARD_HEIGHT, borderRadius:24, overflow:'hidden', backgroundColor: theme.colors.card }, cardStyle]}>
+            <Animated.View style={[{ width:'100%', height:'100%', borderRadius:24, overflow:'hidden', backgroundColor: theme.colors.card }, cardStyle]}>
               <View style={{ flex:1 }}>
-                {current.photos && current.photos.length > 0 ? (
-                  <Animated.Image
-                    key={current.photos[photoIndex]?.id || 'main'}
-                    source={{ uri: current.photos[photoIndex]?.url || current.avatar || '' }}
-                    style={[{ flex:1 }, parallaxStyle]}
-                    resizeMode='cover'
-                  />
-                ) : current.avatar ? (
-                  <Image source={{ uri: current.avatar }} style={{ flex:1 }} resizeMode='cover' />
+                {current?.photos && current.photos.length > 0 ? (
+                  imgLoaded ? (
+                    <Animated.Image
+                      key={`active-${current.id}-${current.photos?.[photoIndex]?.id ?? 'av'}`}
+                      source={{ uri: currentUri || '' }}
+                      style={[{ flex:1 }, parallaxStyle]}
+                      resizeMode='cover'
+                      fadeDuration={0 as any}
+                    />
+                  ) : (
+                    <>
+                      <View style={{ flex:1, backgroundColor: theme.colors.card }} />
+                      {!!currentUri && (
+                        <Image
+                          key={`loader-${current.id}-${current.photos?.[photoIndex]?.id ?? 'av'}`}
+                          source={{ uri: currentUri }}
+                          style={{ position:'absolute', top:0, left:0, right:0, bottom:0, opacity:0 }}
+                          resizeMode='cover'
+                          fadeDuration={0}
+                          onLoadEnd={() => setImgLoaded(true)}
+                        />
+                      )}
+                    </>
+                  )
+                ) : current?.avatar ? (
+                  imgLoaded ? (
+                    <Animated.Image
+                      key={`active-${current.id}-avatar`}
+                      source={{ uri: current.avatar }}
+                      style={[{ flex:1 }, parallaxStyle]}
+                      resizeMode='cover'
+                      fadeDuration={0 as any}
+                    />
+                  ) : (
+                    <>
+                      <View style={{ flex:1, backgroundColor: theme.colors.card }} />
+                      <Image
+                        key={`loader-${current.id}-avatar`}
+                        source={{ uri: current.avatar }}
+                        style={{ position:'absolute', top:0, left:0, right:0, bottom:0, opacity:0 }}
+                        resizeMode='cover'
+                        fadeDuration={0}
+                        onLoadEnd={() => setImgLoaded(true)}
+                      />
+                    </>
+                  )
                 ) : (
-                  <View style={{ flex:1, backgroundColor: theme.colors.border, alignItems:'center', justifyContent:'center' }}>
-                    <Text style={{ color: theme.colors.subtext }}>Sin foto</Text>
-                  </View>
+                  <View style={{ flex:1, backgroundColor: theme.colors.card }} />
                 )}
+                {/* Avoid covering the current image while the next loads to prevent flashes */}
                 {current.photos && current.photos.length > 1 && (
                   <View style={{ position:'absolute', top:0, left:0, right:0, bottom:0 }}>
                     <Pressable onPress={() => setPhotoIndex(i => i <= 0 ? 0 : i - 1)} style={{ position:'absolute', top:0, bottom:0, left:0, width:'30%' }} android_ripple={{ color:'#00000022' }} />
@@ -863,6 +1270,19 @@ export default function ClassicSwipeScreen() {
                   </View>
                 )}
               </View>
+              {DEBUG_PHOTO && (
+                <View style={{ position:'absolute', top:8, right:8, zIndex:50, maxWidth:'54%', backgroundColor:'#111c', padding:8, borderRadius:10 }}>
+                  <Text style={{ color:'#fff', fontSize:11, fontWeight:'700', marginBottom:4 }}>PHOTO DEBUG</Text>
+                  <Text style={{ color:'#fff', fontSize:10 }}>card: {current.id}</Text>
+                  <Text style={{ color:'#fff', fontSize:10 }}>pIdx: {photoIndex}</Text>
+                  <Text style={{ color:'#fff', fontSize:10 }}>loaded: {String(imgLoaded)}</Text>
+                  <Text style={{ color:'#fff', fontSize:10 }}>version: {current.photosVersion || '∅'}</Text>
+                  <Text style={{ color:'#fff', fontSize:10 }}>uri: {(currentUri||'').slice(-28)}</Text>
+                  {debugEvents.slice(-10).reverse().map((e,i)=> (
+                    <Text key={i} style={{ color:'#0ff', fontSize:9 }} numberOfLines={1}>{e}</Text>
+                  ))}
+                </View>
+              )}
               {current.photos && current.photos.length > 1 && (
                 <View
                   style={{ position:'absolute', top:40, bottom:0, left:'32%', right:'32%' }}
@@ -888,13 +1308,76 @@ export default function ClassicSwipeScreen() {
               <Animated.View pointerEvents='none' style={[{ position:'absolute', top:80, alignSelf:'center', paddingHorizontal:18, paddingVertical:10, borderWidth:4, borderColor: theme.colors.primary, borderRadius:999, backgroundColor:'rgba(0,0,0,0.25)' }, superOpacityStyle]}>
                 <Text style={{ color: theme.colors.primary, fontSize:24, fontWeight:'800' }}>SUPER</Text>
               </Animated.View>
-              <View pointerEvents='none' style={{ position:'absolute', left:0, right:0, bottom:INFO_OVERLAY_RAISE, paddingHorizontal:18, paddingBottom:18, paddingTop:12 }}>
-                <Text style={{ color:'#fff', fontSize:22, fontWeight:'800', textShadowColor:'rgba(0,0,0,0.55)', textShadowOffset:{ width:0, height:1 }, textShadowRadius:4 }} numberOfLines={1}>
-                  {current.name}{current.age?`, ${current.age}`:''}
-                </Text>
-                <View style={{ marginTop:6, maxWidth:'92%' }}>
-                  {renderSinglePrompt()}
+              {/* Bottom legibility gradient (phase 1) */}
+              <LinearGradient
+                pointerEvents='none'
+                colors={['rgba(0,0,0,0)','rgba(0,0,0,0.28)','rgba(0,0,0,0.55)','rgba(0,0,0,0.70)']}
+                locations={[0,0.45,0.75,1]}
+                style={{ position:'absolute', left:0, right:0, bottom:0, height:'48%' }}
+              />
+              <View pointerEvents='box-none' style={{ position:'absolute', left:0, right:0, bottom:INFO_OVERLAY_RAISE, paddingHorizontal:18, paddingBottom:18, paddingTop:12 }}>
+                <View style={{ flexDirection:'row', alignItems:'center', gap:8 }}>
+                  <Text style={{ color:'#fff', fontSize:22, fontWeight:'800', textShadowColor:'rgba(0,0,0,0.55)', textShadowOffset:{ width:0, height:1 }, textShadowRadius:4 }} numberOfLines={1}>
+                    {current.name}{current.age?`, ${current.age}`:''}
+                  </Text>
                 </View>
+                <View style={{ flexDirection:'row', alignItems:'center', gap:8, marginTop:4 }}>
+                  {onlineSet.has(current.id) && (
+                    <View style={{ paddingHorizontal:8, paddingVertical:3, borderRadius:10, backgroundColor:'rgba(34,197,94,0.18)', borderWidth:1, borderColor:'rgba(34,197,94,0.55)' }}>
+                      <Text style={{ color:'#fff', fontSize:11, fontWeight:'800' }}>{onlineLabel}</Text>
+                    </View>
+                  )}
+                  {typeof current.distanceKm === 'number' && isFinite(current.distanceKm) && (
+                    <View style={{ paddingHorizontal:8, paddingVertical:3, borderRadius:10, backgroundColor:'rgba(59,130,246,0.18)', borderWidth:1, borderColor:'rgba(59,130,246,0.55)' }}>
+                      <Text style={{ color:'#fff', fontSize:11, fontWeight:'800' }}>📍 {formatDistanceKm(current.distanceKm!)}</Text>
+                    </View>
+                  )}
+                </View>
+                {/* Sectioned content by photo index */}
+                {photoIndex === 0 && !!(current.bio || '').trim() && (
+                  <Text style={{ color:'#fff', fontSize:13.5, fontWeight:'600', opacity:0.95, marginTop:4 }} numberOfLines={4}>
+                    {(current.bio || '').trim()}
+                  </Text>
+                )}
+                {photoIndex === 1 && interestChips.length > 0 && (
+                  <View style={{ marginTop:6 }}>
+                    <Text style={{ color:'#fff', fontSize:12, fontWeight:'700', opacity:0.9 }}>Intereses</Text>
+                    <View style={{ marginTop:6, flexDirection:'row', flexWrap:'wrap', gap:6, maxWidth:'96%', maxHeight:140 }}>
+                      {interestChips.map((label, i) => {
+                        const isCommon = (viewerInterests || []).includes(label)
+                        const chipStyle = isCommon
+                          ? { backgroundColor: colorWithAlpha(theme.colors.primary, 0.18), borderWidth: 1, borderColor: theme.colors.primary }
+                          : { backgroundColor:'rgba(255,255,255,0.12)', borderWidth:1, borderColor:'rgba(255,255,255,0.18)' }
+                        return (
+                          <View key={`int-${label}-${i}`} style={{ paddingHorizontal:10, paddingVertical:5, borderRadius:14, ...chipStyle }}>
+                            <Text style={{ color:'#fff', fontSize:11.5, fontWeight:'700' }} numberOfLines={1}>{label.length > 18 ? `${label.slice(0,16)}…` : label}</Text>
+                          </View>
+                        )
+                      })}
+                    </View>
+                  </View>
+                )}
+                {photoIndex >= 2 && (() => {
+                  const slotIdx = photoIndex - 2
+                  if (slotIdx < 0 || slotIdx >= promptSlots) return null
+                  const left = visiblePrompts[slotIdx * 2]
+                  const right = visiblePrompts[slotIdx * 2 + 1]
+                  if (!left && !right) return null
+                  return (
+                    <View style={{ marginTop:6, maxWidth:'96%', flexDirection:'row', gap:8 }}>
+                      {left && (
+                        <View style={{ flex: right ? 1 : 1 }}>
+                          {renderSinglePrompt(left)}
+                        </View>
+                      )}
+                      {right && (
+                        <View style={{ flex:1 }}>
+                          {renderSinglePrompt(right)}
+                        </View>
+                      )}
+                    </View>
+                  )
+                })()}
               </View>
             </Animated.View>
           </PanGestureHandler>
@@ -915,22 +1398,7 @@ export default function ClassicSwipeScreen() {
           />
         </View>
       )}
-      {match && (
-        <View style={{ position:'absolute', top:0, left:0, right:0, bottom:0, backgroundColor:'rgba(0,0,0,0.65)', justifyContent:'center', alignItems:'center', padding:32 }}>
-          <View style={{ backgroundColor: theme.colors.card, padding:24, borderRadius:24, width:'80%', maxWidth:400, alignItems:'center', gap:12 }}>
-            <Text style={{ color: theme.colors.text, fontSize:26, fontWeight:'800' }}>¡Match!</Text>
-            <Text style={{ color: theme.colors.subtext, textAlign:'center' }}>Se han gustado mutuamente. ¿Abrir el chat ahora?</Text>
-            <View style={{ flexDirection:'row', gap:12, marginTop:8 }}>
-              <Pressable onPress={() => { setMatch(null) }} style={() => ({ paddingVertical:12, paddingHorizontal:20, borderRadius:30, backgroundColor: theme.colors.card, borderWidth:1, borderColor: theme.colors.border })}>
-                <Text style={{ color: theme.colors.text, fontWeight:'700' }}>Seguir</Text>
-              </Pressable>
-              <Pressable onPress={() => { const { matchId } = match; setMatch(null); router.push(`/(tabs)/chat/${matchId}`) }} style={() => ({ paddingVertical:12, paddingHorizontal:20, borderRadius:30, backgroundColor: theme.colors.primary, borderWidth:1, borderColor: theme.colors.primary })}>
-                <Text style={{ color: theme.colors.primaryText || '#fff', fontWeight:'700' }}>Ir al chat</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      )}
+      {/* Match popup unified via MatchPopupProvider */}
       {tutorialVisible && (
         <View style={{ position:'absolute', top:0, left:0, right:0, bottom:0, backgroundColor:'rgba(0,0,0,0.65)' }}>
           <View style={{ flex:1 }}>
